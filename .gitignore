@@ -5,3 +5,4 @@ qdrant_data/
 *.log
 .env
 DATA_ROOT/
+/data
