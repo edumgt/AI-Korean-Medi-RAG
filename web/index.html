@@ -3,11 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Med RAG MVP - Web</title>
-
-  <!-- Tailwind (CDN) -->
+  <title>Med Quiz MVP - Web</title>
   <script src="https://cdn.tailwindcss.com"></script>
-
   <meta name="color-scheme" content="light dark">
 </head>
 <body class="bg-slate-50 text-slate-900">
@@ -16,8 +13,8 @@
       <div class="flex items-center gap-2">
         <div class="h-9 w-9 rounded-xl bg-slate-900 text-white grid place-items-center font-semibold">M</div>
         <div>
-          <div class="font-semibold leading-tight">Med RAG MVP</div>
-          <div class="text-xs text-slate-500 -mt-0.5">근거 기반 질의응답 (RAG)</div>
+          <div class="font-semibold leading-tight">Med Quiz MVP</div>
+          <div class="text-xs text-slate-500 -mt-0.5">객관식 문제 풀이 화면</div>
         </div>
       </div>
       <div class="ml-auto flex items-center gap-2">
@@ -30,90 +27,100 @@
   </header>
 
   <main class="mx-auto max-w-5xl px-4 py-6">
-    <!-- Query card -->
     <section class="rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div class="p-4 sm:p-6">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <div class="w-full sm:w-56">
-            <label class="block text-sm font-medium text-slate-700">도메인</label>
-            <select id="domain" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/20">
-              <option value="">전체</option>
-              <option value="소아청소년과">소아청소년과</option>
-              <option value="응급의학과">응급의학과</option>
-              <option value="산부인과">산부인과</option>
-              <option value="내과">내과</option>
-            </select>
-            <p class="mt-1 text-xs text-slate-500">폴더명이 도메인으로 매핑됩니다.</p>
-          </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <span id="badgeQaId" class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">qa_id: -</span>
+          <span id="badgeDomain" class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">domain: -</span>
+          <span id="badgeType" class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">q_type: -</span>
+        </div>
 
-          <div class="flex-1">
-            <label class="block text-sm font-medium text-slate-700">질문</label>
-            <div class="mt-1 flex gap-2">
-              <input id="query" type="text" placeholder="예) CAH 조기진단에 가장 중요한 호르몬 수치는?"
-                     class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/20" />
-              <button id="btnAsk" class="shrink-0 rounded-xl bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800">
-                질의
-              </button>
-            </div>
-            <div class="mt-2 flex items-center gap-2 text-xs text-slate-500">
-              <span>Enter로 실행</span>
-              <span class="text-slate-300">•</span>
-              <span>결과에는 근거 문단(출처/연도)이 함께 표시됩니다</span>
-            </div>
+        <div class="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+          <div class="text-sm font-medium text-slate-600">문항</div>
+          <div id="questionText" class="mt-2 text-lg font-semibold leading-relaxed text-slate-900"></div>
+        </div>
+
+        <div class="mt-5 rounded-2xl border border-slate-200 bg-white">
+          <div class="border-b border-slate-200 px-4 py-3 flex items-center gap-2">
+            <div class="font-semibold">선택지</div>
+            <div class="ml-auto text-xs text-slate-500">정답 공개 전에는 강조되지 않습니다</div>
           </div>
+          <div id="choices" class="p-4 grid gap-3"></div>
         </div>
 
         <div id="status" class="mt-4 hidden rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"></div>
 
-        <!-- Answer -->
-        <div class="mt-6 grid gap-4 lg:grid-cols-3">
+        <div class="mt-5 grid gap-4 lg:grid-cols-3">
           <div class="lg:col-span-2 rounded-2xl border border-slate-200 bg-white">
             <div class="border-b border-slate-200 px-4 py-3 flex items-center gap-2">
-              <div class="font-semibold">답변</div>
-              <div id="badgeMode" class="ml-auto text-xs rounded-full bg-slate-100 px-2 py-1 text-slate-600">mode: —</div>
+              <div class="font-semibold">정답</div>
+              <div id="badgeMode" class="ml-auto text-xs rounded-full bg-slate-100 px-2 py-1 text-slate-600">hidden</div>
             </div>
             <div class="p-4">
-              <div id="answer" class="prose max-w-none prose-slate">
-                <p class="text-slate-500">질문을 입력하고 <span class="font-medium">질의</span>를 눌러주세요.</p>
+              <div id="answer" class="text-sm leading-relaxed text-slate-600">
+                정답 보기 버튼을 누르면 정답이 표시됩니다.
+              </div>
+              <div class="mt-4 flex flex-wrap gap-2">
+                <button id="btnToggleAnswer" class="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800">정답 보기</button>
+                <button id="btnResetView" class="rounded-xl border border-slate-200 px-4 py-2 text-sm hover:bg-slate-50">다시 가리기</button>
               </div>
             </div>
           </div>
 
-          <!-- History -->
           <aside class="rounded-2xl border border-slate-200 bg-white">
             <div class="border-b border-slate-200 px-4 py-3 flex items-center gap-2">
-              <div class="font-semibold">히스토리</div>
-              <button id="btnClearHistory" class="ml-auto text-xs rounded-full border border-slate-200 px-2 py-1 hover:bg-slate-50">지우기</button>
+              <div class="font-semibold">문항 정보</div>
             </div>
-            <div id="history" class="p-2">
-              <!-- items -->
+            <div class="p-4 space-y-3 text-sm text-slate-700">
+              <div>
+                <div class="text-xs text-slate-500">원본 JSON</div>
+                <pre id="rawJson" class="mt-2 overflow-x-auto rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-700"></pre>
+              </div>
             </div>
           </aside>
         </div>
 
-        <!-- Citations -->
-        <div class="mt-4 rounded-2xl border border-slate-200 bg-white">
-          <div class="border-b border-slate-200 px-4 py-3 flex items-center gap-2">
-            <div class="font-semibold">근거</div>
-            <div class="ml-auto text-xs text-slate-500">상위 3–5개 문단</div>
+        <section class="mt-5 rounded-2xl border border-slate-200 bg-white">
+          <div class="border-b border-slate-200 px-4 py-3 flex flex-wrap items-center gap-2">
+            <div class="font-semibold">OpenAI 사용 체크</div>
+            <div id="badgeOpenAi" class="ml-auto text-xs rounded-full bg-slate-100 px-2 py-1 text-slate-600">disabled</div>
           </div>
-          <div id="citations" class="p-4 grid gap-3 md:grid-cols-2">
-            <div class="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">
-              근거 문단은 질의 후 표시됩니다.
+          <div class="p-4 grid gap-4 lg:grid-cols-3">
+            <div class="lg:col-span-2">
+              <div id="openAiSummary" class="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700">
+                OpenAI 사용 여부를 아직 확인하지 않았습니다.
+              </div>
+              <div class="mt-4 flex flex-wrap gap-2">
+                <button id="btnCheckOpenAI" class="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800">OpenAI 체크 실행</button>
+                <button id="btnClearOpenAI" class="rounded-xl border border-slate-200 px-4 py-2 text-sm hover:bg-slate-50">결과 지우기</button>
+              </div>
             </div>
+            <aside class="rounded-2xl border border-slate-200 bg-white">
+              <div class="p-4 space-y-3 text-sm text-slate-700">
+                <div>
+                  <div class="text-xs text-slate-500">사용 설정</div>
+                  <div id="openAiEnabledText" class="mt-1 font-medium text-slate-900">-</div>
+                </div>
+                <div>
+                  <div class="text-xs text-slate-500">모델</div>
+                  <div id="openAiModelText" class="mt-1 font-medium text-slate-900">-</div>
+                </div>
+                <div>
+                  <div class="text-xs text-slate-500">체크 엔드포인트</div>
+                  <div id="openAiEndpointText" class="mt-1 break-all font-medium text-slate-900">-</div>
+                </div>
+              </div>
+            </aside>
           </div>
-        </div>
-
+        </section>
       </div>
     </section>
 
-    <!-- Footer -->
     <footer class="mt-6 text-xs text-slate-500">
-      <p>⚠️ 의료 의사결정은 전문가 판단이 필요합니다. 본 화면은 지식 탐색/학습 보조용 MVP입니다.</p>
+      <p>⚠️ 의료 의사결정은 전문가 판단이 필요합니다. 본 화면은 학습/검토용 예시 UI입니다.</p>
     </footer>
   </main>
 
-  <!-- Settings modal -->
   <div id="modal" class="fixed inset-0 z-50 hidden">
     <div class="absolute inset-0 bg-black/30"></div>
     <div class="absolute inset-0 grid place-items-center p-4">
@@ -122,15 +129,28 @@
           <div class="font-semibold">API 설정</div>
           <button id="btnClose" class="ml-auto rounded-lg px-2 py-1 hover:bg-slate-100">✕</button>
         </div>
-        <div class="p-5 space-y-3">
+        <div class="p-5 space-y-4">
           <div class="text-sm text-slate-600">
-            기본값은 <span class="font-mono">현재 Origin</span>입니다. (FastAPI에서 정적 호스팅하거나, CORS 허용 후 다른 Origin에서도 호출 가능)
+            API Base URL과 OpenAI 사용 체크 설정을 저장합니다. OpenAI 체크 버튼은 <code class="rounded bg-slate-100 px-1 py-0.5 text-xs">/api/openai-check</code> 엔드포인트를 호출합니다.
           </div>
           <div>
             <label class="block text-sm font-medium text-slate-700">API Base URL</label>
             <input id="apiBase" type="text" placeholder="예) http://localhost:8000"
               class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/20" />
-            <p class="mt-1 text-xs text-slate-500">빈 값이면 현재 origin(예: https://example.com) 기준으로 호출합니다.</p>
+            <p class="mt-1 text-xs text-slate-500">빈 값이면 현재 origin 기준으로 링크와 체크 URL을 생성합니다.</p>
+          </div>
+          <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <label class="flex items-center gap-3">
+              <input id="useOpenAI" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900/20" />
+              <span class="text-sm font-medium text-slate-800">OpenAI 사용 체크 활성화</span>
+            </label>
+            <p class="mt-2 text-xs text-slate-500">체크가 꺼져 있으면 테스트 요청을 보내지 않고 화면에서 비활성 상태로 표시합니다.</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700">OpenAI 모델명</label>
+            <input id="openAiModel" type="text" placeholder="예) gpt-5.2-thinking"
+              class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/20" />
+            <p class="mt-1 text-xs text-slate-500">체크 요청 바디에 함께 전달됩니다.</p>
           </div>
           <div class="flex gap-2">
             <button id="btnSave" class="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800">저장</button>

@@ -21,7 +21,7 @@ app.mount("/", StaticFiles(directory="web", html=True), name="web")
 간단 정적 서버:
 ```bash
 cd web
-python -m http.server 5173
+python3 -m http.server 5173
 # http://localhost:5173
 ```
 
