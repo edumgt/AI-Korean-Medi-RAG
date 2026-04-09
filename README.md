@@ -1,5 +1,5 @@
 # Med-RAG MVP (의학 도메인 원천/라벨링 JSON → RAG + 자동평가)
-
+ 
 ## AI 학습 데이타는 AI Hub 공공기관 사이트에서 다운로드 가능합니다.
 
 ![alt text](image.png)
