@@ -1,0 +1,12 @@
+.git
+.github
+.codex
+.venv
+__pycache__
+*.pyc
+*.log
+.env
+DATA_ROOT
+eval
+image.png
+qdrant_data

@@ -3,6 +3,5 @@ __pycache__/
 *.pyc
 qdrant_data/
 *.log
-.env
-DATA_ROOT/
-/data
+
+

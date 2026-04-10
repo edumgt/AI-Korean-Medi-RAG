@@ -1,43 +1,86 @@
 from __future__ import annotations
+
+import json
 import os
 import re
-from typing import Optional, List, Dict, Any
+from collections import Counter
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from dotenv import load_dotenv
-from qdrant_client import QdrantClient
-from sentence_transformers import SentenceTransformer
-import requests
+from rapidfuzz import fuzz
 
 from .awssm import get_openai_api_key
-# awssm.py가 프로젝트 루트에 있으면 아래로 바꾸세요:
-# from awssm import get_openai_api_key
 
 load_dotenv()
 
-QDRANT_URL = os.environ.get("QDRANT_URL", "http://localhost:6333")
-EMBED_MODEL = os.environ.get("EMBED_MODEL", "intfloat/multilingual-e5-small")
-
-LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "none").lower()  # none | ollama | openai
-OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1")
+DATA_PATH = Path(os.environ.get("DOCS_PATH", "data/documents.jsonl")).expanduser().resolve()
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "none").lower()  # none | openai
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 
-app = FastAPI(title="Med-RAG MVP", version="0.1.0")
-
-client = QdrantClient(url=QDRANT_URL)
-embedder = SentenceTransformer(EMBED_MODEL)
+app = FastAPI(title="Med-RAG MVP", version="0.2.0")
 
 
 def normalize_collection_name(domain_name: str) -> str:
     s = (domain_name or "").strip()
     s = s.replace(" ", "_")
     s = "".join(ch if ch.isalnum() or ch in "_-" else "_" for ch in s)
-    if not s:
-        s = "unknown"
-    return f"med_{s.lower()}"
+    return f"med_{s.lower()}" if s else "med_all"
+
+
+def chunk_text(text: str, max_chars: int = 1200, overlap: int = 120) -> List[str]:
+    text = " ".join((text or "").split())
+    if not text:
+        return []
+    if len(text) <= max_chars:
+        return [text]
+    chunks = []
+    start = 0
+    while start < len(text):
+        end = min(len(text), start + max_chars)
+        chunks.append(text[start:end])
+        if end == len(text):
+            break
+        start = max(0, end - overlap)
+    return chunks
+
+
+def tokenize(text: str) -> set[str]:
+    return {tok for tok in re.findall(r"[0-9A-Za-z가-힣]+", (text or "").lower()) if len(tok) >= 2}
+
+
+def load_documents(path: Path) -> List[Dict[str, Any]]:
+    if not path.exists():
+        return []
+
+    docs = []
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            for idx, chunk in enumerate(chunk_text(row.get("text", ""))):
+                docs.append(
+                    {
+                        "doc_id": str(row.get("doc_id") or "unknown"),
+                        "domain_name": str(row.get("domain_name") or "unknown"),
+                        "source_spec": row.get("source_spec"),
+                        "creation_year": row.get("creation_year"),
+                        "chunk_idx": idx,
+                        "text": chunk,
+                        "tokens": tokenize(chunk),
+                    }
+                )
+    return docs
+
+
+DOC_CHUNKS = load_documents(DATA_PATH)
+KNOWN_COLLECTIONS = {"med_all"} | {
+    normalize_collection_name(chunk["domain_name"]) for chunk in DOC_CHUNKS if chunk.get("domain_name")
+}
 
 
 class AskRequest(BaseModel):
@@ -77,31 +120,31 @@ class OpenAICheckResponse(BaseModel):
     message: str
 
 
-def embed_query(q: str) -> List[float]:
-    vec = embedder.encode(["query: " + q], normalize_embeddings=True)
-    return vec[0].tolist()
-
-
 def collection_exists(name: str) -> bool:
-    cols = client.get_collections().collections
-    return any(c.name == name for c in cols)
+    return name in KNOWN_COLLECTIONS
 
 
-def search_chunks(collection: str, qvec: List[float], top_k: int) -> List[Dict[str, Any]]:
-    res = client.search(
-        collection_name=collection,
-        query_vector=qvec,
-        limit=top_k,
-        with_payload=True,
-    )
-    hits = []
-    for p in res:
-        payload = p.payload or {}
-        hits.append({
-            "score": float(p.score),
-            "payload": payload,
-        })
-    return hits
+def search_chunks(domain_name: Optional[str], query: str, top_k: int) -> List[Dict[str, Any]]:
+    q_tokens = tokenize(query)
+    query_norm = " ".join((query or "").split())
+
+    candidates = DOC_CHUNKS
+    if domain_name:
+        candidates = [chunk for chunk in DOC_CHUNKS if chunk["domain_name"] == domain_name]
+
+    scored = []
+    for chunk in candidates:
+        excerpt = chunk["text"]
+        overlap = len(q_tokens & chunk["tokens"])
+        token_score = overlap * 20
+        partial = fuzz.partial_ratio(query_norm, excerpt) if query_norm else 0
+        score = token_score + partial
+        if score <= 0:
+            continue
+        scored.append({"score": float(score), "payload": chunk})
+
+    scored.sort(key=lambda item: item["score"], reverse=True)
+    return scored[:top_k]
 
 
 def build_prompt(question: str, hits: List[Dict[str, Any]]) -> str:
@@ -117,7 +160,7 @@ def build_prompt(question: str, hits: List[Dict[str, Any]]) -> str:
         ctx.append(meta + "\n" + (pl.get("text") or ""))
 
     context_block = "\n\n".join(ctx)
-    return f"""당신은 의료 지식 도우미입니다.
+    return f"""당신은 의료/법률 문서 도우미입니다.
 아래 '근거'만 사용해서 질문에 답하세요.
 - 근거에 없는 내용은 '근거 부족'이라고 말하세요.
 - 답변은 간결하게, 핵심만 bullet로 작성하세요.
@@ -129,14 +172,6 @@ def build_prompt(question: str, hits: List[Dict[str, Any]]) -> str:
 [근거]
 {context_block}
 """
-
-
-def call_ollama(prompt: str) -> str:
-    url = OLLAMA_BASE_URL.rstrip("/") + "/api/generate"
-    payload = {"model": OLLAMA_MODEL, "prompt": prompt, "stream": False}
-    r = requests.post(url, json=payload, timeout=120)
-    r.raise_for_status()
-    return r.json().get("response", "").strip()
 
 
 def call_openai(prompt: str) -> str:
@@ -151,14 +186,8 @@ def call_openai(prompt: str) -> str:
     resp = openai.chat.completions.create(
         model=OPENAI_MODEL,
         messages=[
-            {
-                "role": "system",
-                "content": "You are a medical knowledge assistant. Use only provided evidence."
-            },
-            {
-                "role": "user",
-                "content": prompt
-            },
+            {"role": "system", "content": "You are a Korean document assistant. Use only provided evidence."},
+            {"role": "user", "content": prompt},
         ],
         temperature=0.2,
     )
@@ -168,62 +197,46 @@ def call_openai(prompt: str) -> str:
 def fallback_answer(question: str, hits: List[Dict[str, Any]]) -> str:
     lines = ["(LLM 미설정) 관련 근거를 아래에서 확인하세요.", "", "질문: " + question, "", "핵심 근거:"]
     for i, h in enumerate(hits, start=1):
-        t = (h["payload"].get("text") or "")
-        t = re.sub(r"\s+", " ", t).strip()
+        t = re.sub(r"\s+", " ", (h["payload"].get("text") or "")).strip()
         lines.append(f"- [{i}] " + (t[:240] + ("..." if len(t) > 240 else "")))
     lines.append("")
-    lines.append("[근거] " + ", ".join([f"[{i}]" for i in range(1, len(hits) + 1)]))
+    lines.append("[근거] " + ", ".join(f"[{i}]" for i in range(1, len(hits) + 1)))
     return "\n".join(lines)
 
 
 @app.post("/ask", response_model=AskResponse)
 def ask(req: AskRequest):
-    qvec = embed_query(req.query)
-
     used = "med_all"
+    domain_name = None
+
     if req.domain:
         cand = normalize_collection_name(req.domain)
         if collection_exists(cand):
             used = cand
+            domain_name = req.domain
 
-    hits = search_chunks(used, qvec, req.top_k)
+    hits = search_chunks(domain_name, req.query, req.top_k)
 
     citations = []
     for h in hits:
         pl = h["payload"]
-        excerpt = (pl.get("text") or "").strip()
-        excerpt = re.sub(r"\s+", " ", excerpt)
+        excerpt = re.sub(r"\s+", " ", (pl.get("text") or "").strip())
         citations.append(
             Citation(
                 doc_id=str(pl.get("doc_id")),
                 domain_name=str(pl.get("domain_name") or "unknown"),
                 source_spec=pl.get("source_spec"),
                 creation_year=pl.get("creation_year"),
-                excerpt=excerpt[:480] + ("..." if len(excerpt) > 480 else "")
+                excerpt=excerpt[:480] + ("..." if len(excerpt) > 480 else ""),
             )
         )
 
     if not hits:
-        return AskResponse(
-            answer="관련 근거를 찾지 못했습니다.",
-            citations=[],
-            used_collection=used
-        )
+        return AskResponse(answer="관련 근거를 찾지 못했습니다.", citations=[], used_collection=used)
 
     prompt = build_prompt(req.query, hits)
-
-    if LLM_PROVIDER == "ollama":
-        answer = call_ollama(prompt)
-    elif LLM_PROVIDER == "openai":
-        answer = call_openai(prompt)
-    else:
-        answer = fallback_answer(req.query, hits)
-
-    return AskResponse(
-        answer=answer,
-        citations=citations,
-        used_collection=used
-    )
+    answer = call_openai(prompt) if LLM_PROVIDER == "openai" else fallback_answer(req.query, hits)
+    return AskResponse(answer=answer, citations=citations, used_collection=used)
 
 
 @app.post("/api/openai-check", response_model=OpenAICheckResponse)
@@ -236,14 +249,13 @@ def openai_check(req: OpenAICheckRequest):
             model=req.model or OPENAI_MODEL,
             key_source="disabled",
             key_loaded=False,
-            message="OpenAI 사용 체크가 비활성화되어 있습니다."
+            message="OpenAI 사용 체크가 비활성화되어 있습니다.",
         )
 
     try:
         api_key = get_openai_api_key()
         model_name = (req.model or OPENAI_MODEL).strip() or OPENAI_MODEL
         key_source = "env" if os.getenv("OPENAI_API_KEY") else "aws-secrets-manager"
-
         if not api_key:
             raise RuntimeError("OPENAI_API_KEY is empty")
 
@@ -254,7 +266,7 @@ def openai_check(req: OpenAICheckRequest):
             model=model_name,
             key_source=key_source,
             key_loaded=True,
-            message="OpenAI API 키를 정상적으로 불러왔습니다."
+            message="OpenAI API 키를 정상적으로 불러왔습니다.",
         )
     except Exception as e:
         return OpenAICheckResponse(
@@ -264,7 +276,7 @@ def openai_check(req: OpenAICheckRequest):
             model=req.model or OPENAI_MODEL,
             key_source="unknown",
             key_loaded=False,
-            message=f"OpenAI 체크 실패: {str(e)}"
+            message=f"OpenAI 체크 실패: {str(e)}",
         )
 
 
@@ -272,8 +284,9 @@ def openai_check(req: OpenAICheckRequest):
 def healthz():
     return {
         "ok": True,
-        "qdrant": QDRANT_URL,
-        "embed_model": EMBED_MODEL,
+        "docs_path": str(DATA_PATH),
+        "doc_chunks": len(DOC_CHUNKS),
+        "domains": dict(Counter(chunk["domain_name"] for chunk in DOC_CHUNKS)),
         "llm_provider": LLM_PROVIDER,
     }
 
