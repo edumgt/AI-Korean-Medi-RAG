@@ -235,7 +235,18 @@ def ask(req: AskRequest):
         return AskResponse(answer="관련 근거를 찾지 못했습니다.", citations=[], used_collection=used)
 
     prompt = build_prompt(req.query, hits)
-    answer = call_openai(prompt) if LLM_PROVIDER == "openai" else fallback_answer(req.query, hits)
+    if LLM_PROVIDER == "openai":
+        try:
+            answer = call_openai(prompt)
+        except Exception as e:
+            answer = (
+                "(OpenAI 호출 실패로 근거 기반 요약으로 대체합니다.)\n\n"
+                + fallback_answer(req.query, hits)
+                + f"\n\n[오류] {str(e)}"
+            )
+    else:
+        answer = fallback_answer(req.query, hits)
+
     return AskResponse(answer=answer, citations=citations, used_collection=used)
 
 
