@@ -4,3 +4,13 @@ python-dotenv==1.0.1
 rapidfuzz==3.9.7
 openai==1.40.3
 boto3==1.35.24
+
+# ── 관계형 DB (SQLAlchemy) ──────────────────────────────────────────────────────
+sqlalchemy==2.0.36
+alembic==1.14.0
+# PostgreSQL 드라이버 (SQLite 사용 시 불필요하지만 설치해 두어도 무방)
+psycopg2-binary==2.9.10
+
+# ── 문서 저장소 (MongoDB) ────────────────────────────────────────────────────────
+pymongo==4.10.1
+motor==3.7.1
