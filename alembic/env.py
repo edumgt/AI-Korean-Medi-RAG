@@ -1,0 +1,60 @@
+import os
+from logging.config import fileConfig
+
+from sqlalchemy import engine_from_config
+from sqlalchemy import pool
+
+from alembic import context
+
+# Alembic Config 오브젝트 (alembic.ini 값에 접근)
+config = context.config
+
+# 로깅 설정
+if config.config_file_name is not None:
+    fileConfig(config.config_file_name)
+
+# SQLAlchemy 모델의 MetaData 를 연결하여 autogenerate 를 활성화한다.
+from api.db.sql import Base  # noqa: E402
+target_metadata = Base.metadata
+
+# DATABASE_URL 환경 변수를 alembic.ini 의 sqlalchemy.url 보다 우선 적용한다.
+_db_url = os.environ.get("DATABASE_URL")
+if _db_url:
+    config.set_main_option("sqlalchemy.url", _db_url)
+
+
+def run_migrations_offline() -> None:
+    """오프라인 모드에서 마이그레이션을 실행한다."""
+    url = config.get_main_option("sqlalchemy.url")
+    context.configure(
+        url=url,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        dialect_opts={"paramstyle": "named"},
+    )
+
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+def run_migrations_online() -> None:
+    """온라인 모드에서 마이그레이션을 실행한다."""
+    connectable = engine_from_config(
+        config.get_section(config.config_ini_section, {}),
+        prefix="sqlalchemy.",
+        poolclass=pool.NullPool,
+    )
+
+    with connectable.connect() as connection:
+        context.configure(
+            connection=connection, target_metadata=target_metadata
+        )
+
+        with context.begin_transaction():
+            context.run_migrations()
+
+
+if context.is_offline_mode():
+    run_migrations_offline()
+else:
+    run_migrations_online()

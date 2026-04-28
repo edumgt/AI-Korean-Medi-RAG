@@ -4,4 +4,5 @@ __pycache__/
 qdrant_data/
 *.log
 
-
+# SQLite DB 파일 (로컬 개발용)
+*.db

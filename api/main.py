@@ -5,18 +5,30 @@ import os
 import re
 import hashlib
 import math
+from contextlib import asynccontextmanager
 from urllib import parse as urllib_parse, request as urllib_request
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from rapidfuzz import fuzz
+from sqlalchemy import text as sa_text
+from sqlalchemy.orm import Session
 
 from .awssm import get_openai_api_key
+from .db.sql import DocumentMeta, QueryLog, get_db, init_db
+from .db.mongo import (
+    bulk_upsert_doc_chunks,
+    get_recent_query_logs,
+    init_mongo_indexes,
+    is_mongo_enabled,
+    log_query_mongo,
+    mongo_ping,
+)
 
 load_dotenv()
 
@@ -24,7 +36,26 @@ DATA_PATH = Path(os.environ.get("DOCS_PATH", "data/documents.jsonl")).expanduser
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "none").lower()  # none | openai
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 
-app = FastAPI(title="Med-RAG MVP", version="0.2.0")
+
+# ── 애플리케이션 라이프사이클 ─────────────────────────────────────────────────
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """시작 시 DB 초기화, 종료 시 정리."""
+    # SQLAlchemy 테이블 생성 (없으면)
+    init_db()
+
+    # MongoDB 인덱스 초기화
+    await init_mongo_indexes()
+
+    # JSONL 문서를 MongoDB 에 동기화 (MONGO_URL 설정 시)
+    if is_mongo_enabled() and DOC_CHUNKS:
+        await bulk_upsert_doc_chunks(DOC_CHUNKS)
+
+    yield  # 서버 실행
+
+
+app = FastAPI(title="Med-RAG MVP", version="0.2.0", lifespan=lifespan)
 
 
 def normalize_collection_name(domain_name: str) -> str:
@@ -208,9 +239,10 @@ def fallback_answer(question: str, hits: List[Dict[str, Any]]) -> str:
 
 
 @app.post("/ask", response_model=AskResponse)
-def ask(req: AskRequest):
+async def ask(req: AskRequest, db: Session = Depends(get_db)):
     used = "med_all"
     domain_name = None
+    success = True
 
     if req.domain:
         cand = normalize_collection_name(req.domain)
@@ -235,13 +267,16 @@ def ask(req: AskRequest):
         )
 
     if not hits:
-        return AskResponse(answer="관련 근거를 찾지 못했습니다.", citations=[], used_collection=used)
+        answer = "관련 근거를 찾지 못했습니다."
+        await _persist_query(db, req, used, answer, success=False)
+        return AskResponse(answer=answer, citations=[], used_collection=used)
 
     prompt = build_prompt(req.query, hits)
     if LLM_PROVIDER == "openai":
         try:
             answer = call_openai(prompt)
         except Exception as e:
+            success = False
             answer = (
                 "(OpenAI 호출 실패로 근거 기반 요약으로 대체합니다.)\n\n"
                 + fallback_answer(req.query, hits)
@@ -250,7 +285,45 @@ def ask(req: AskRequest):
     else:
         answer = fallback_answer(req.query, hits)
 
+    await _persist_query(db, req, used, answer, success=success)
+
     return AskResponse(answer=answer, citations=citations, used_collection=used)
+
+
+async def _persist_query(
+    db: Session,
+    req: AskRequest,
+    used_collection: str,
+    answer: str,
+    success: bool = True,
+) -> None:
+    """질의 이력을 SQLAlchemy(동기) 와 MongoDB(비동기)에 동시 저장한다. 실패해도 요청을 막지 않는다."""
+    _log_query_sql(db, req, used_collection, answer, success)
+    await log_query_mongo(req.query, req.domain, used_collection, answer, req.top_k, LLM_PROVIDER, success=success)
+
+
+def _log_query_sql(
+    db: Session,
+    req: AskRequest,
+    used_collection: str,
+    answer: str,
+    success: bool = True,
+) -> None:
+    """SQLAlchemy 세션을 사용해 질의 이력을 저장한다. 실패해도 요청을 막지 않는다."""
+    try:
+        log = QueryLog(
+            query=req.query,
+            domain=req.domain,
+            used_collection=used_collection,
+            answer=answer[:2000],
+            top_k=req.top_k,
+            llm_provider=LLM_PROVIDER,
+            success=success,
+        )
+        db.add(log)
+        db.commit()
+    except Exception:
+        db.rollback()
 
 
 @app.post("/api/openai-check", response_model=OpenAICheckResponse)
@@ -303,6 +376,51 @@ def healthz():
         "domains": dict(Counter(chunk["domain_name"] for chunk in DOC_CHUNKS)),
         "llm_provider": LLM_PROVIDER,
     }
+
+
+class DbStatusResponse(BaseModel):
+    sql_ok: bool
+    sql_url: str
+    mongo_enabled: bool
+    mongo_ok: bool
+    mongo_url: str
+
+
+@app.get("/api/db-status", response_model=DbStatusResponse)
+async def db_status(db: Session = Depends(get_db)):
+    """SQLAlchemy 와 MongoDB 연결 상태를 반환한다."""
+    from .db.sql import DATABASE_URL as SQL_URL
+    from .db.mongo import MONGO_URL as _MONGO_URL
+
+    # SQLAlchemy 헬스 체크
+    sql_ok = False
+    try:
+        db.execute(sa_text("SELECT 1"))
+        sql_ok = True
+    except Exception:
+        pass
+
+    # MongoDB 헬스 체크
+    mongo_ok = await mongo_ping()
+
+    # URL 에서 비밀번호 마스킹
+    def _mask(url: str) -> str:
+        return re.sub(r"(://[^:@]+:)[^@]+(@)", r"\1***\2", url) if url else ""
+
+    return DbStatusResponse(
+        sql_ok=sql_ok,
+        sql_url=_mask(SQL_URL),
+        mongo_enabled=is_mongo_enabled(),
+        mongo_ok=mongo_ok,
+        mongo_url=_mask(_MONGO_URL),
+    )
+
+
+@app.get("/api/query-logs")
+async def query_logs_recent(limit: int = 20):
+    """최근 질의 이력을 MongoDB 에서 반환한다 (MongoDB 미설정 시 빈 배열)."""
+    logs = await get_recent_query_logs(limit=min(limit, 100))
+    return {"logs": logs, "count": len(logs)}
 
 
 app.mount("/", StaticFiles(directory="web", html=True), name="web")
