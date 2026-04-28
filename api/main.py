@@ -16,6 +16,7 @@ from fastapi import Depends, FastAPI
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from rapidfuzz import fuzz
+from sqlalchemy import text as sa_text
 from sqlalchemy.orm import Session
 
 from .awssm import get_openai_api_key
@@ -267,8 +268,7 @@ async def ask(req: AskRequest, db: Session = Depends(get_db)):
 
     if not hits:
         answer = "관련 근거를 찾지 못했습니다."
-        _log_query(db, req, used, answer, success=False)
-        await log_query_mongo(req.query, req.domain, used, answer, req.top_k, LLM_PROVIDER, success=False)
+        await _persist_query(db, req, used, answer, success=False)
         return AskResponse(answer=answer, citations=[], used_collection=used)
 
     prompt = build_prompt(req.query, hits)
@@ -285,13 +285,24 @@ async def ask(req: AskRequest, db: Session = Depends(get_db)):
     else:
         answer = fallback_answer(req.query, hits)
 
-    _log_query(db, req, used, answer, success=success)
-    await log_query_mongo(req.query, req.domain, used, answer, req.top_k, LLM_PROVIDER, success=success)
+    await _persist_query(db, req, used, answer, success=success)
 
     return AskResponse(answer=answer, citations=citations, used_collection=used)
 
 
-def _log_query(
+async def _persist_query(
+    db: Session,
+    req: AskRequest,
+    used_collection: str,
+    answer: str,
+    success: bool = True,
+) -> None:
+    """질의 이력을 SQLAlchemy(동기) 와 MongoDB(비동기)에 동시 저장한다. 실패해도 요청을 막지 않는다."""
+    _log_query_sql(db, req, used_collection, answer, success)
+    await log_query_mongo(req.query, req.domain, used_collection, answer, req.top_k, LLM_PROVIDER, success=success)
+
+
+def _log_query_sql(
     db: Session,
     req: AskRequest,
     used_collection: str,
@@ -384,7 +395,7 @@ async def db_status(db: Session = Depends(get_db)):
     # SQLAlchemy 헬스 체크
     sql_ok = False
     try:
-        db.execute(__import__("sqlalchemy").text("SELECT 1"))
+        db.execute(sa_text("SELECT 1"))
         sql_ok = True
     except Exception:
         pass
@@ -394,8 +405,7 @@ async def db_status(db: Session = Depends(get_db)):
 
     # URL 에서 비밀번호 마스킹
     def _mask(url: str) -> str:
-        import re as _re
-        return _re.sub(r"(://[^:@]+:)[^@]+(@)", r"\1***\2", url) if url else ""
+        return re.sub(r"(://[^:@]+:)[^@]+(@)", r"\1***\2", url) if url else ""
 
     return DbStatusResponse(
         sql_ok=sql_ok,
