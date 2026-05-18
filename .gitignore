@@ -6,3 +6,4 @@ qdrant_data/
 
 # SQLite DB 파일 (로컬 개발용)
 *.db
+*.env

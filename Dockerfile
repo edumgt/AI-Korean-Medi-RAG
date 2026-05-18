@@ -14,6 +14,6 @@ COPY api ./api
 COPY web ./web
 COPY data ./data
 
-EXPOSE 8000
+EXPOSE 8765
 
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

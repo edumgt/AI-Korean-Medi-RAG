@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
     image: edumgt/ai-korean-medi-rag-app:latest
     ports:
-      - "8000:8000"
+      - "8765:8000"
     environment:
       DOCS_PATH: ${DOCS_PATH:-/app/data/documents.jsonl}
       LLM_PROVIDER: ${LLM_PROVIDER:-none}
