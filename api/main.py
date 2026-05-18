@@ -181,8 +181,14 @@ def search_chunks(domain_name: Optional[str], query: str, top_k: int) -> List[Di
     return scored[:top_k]
 
 
+COUNSELING_DOMAINS = {"우울증", "불안장애", "중독", "일반군"}
+
+
 def build_prompt(question: str, hits: List[Dict[str, Any]]) -> str:
     ctx = []
+    domain_name = hits[0]["payload"].get("domain_name", "") if hits else ""
+    is_counseling = domain_name in COUNSELING_DOMAINS
+
     for i, h in enumerate(hits, start=1):
         pl = h["payload"]
         meta = (
@@ -194,6 +200,22 @@ def build_prompt(question: str, hits: List[Dict[str, Any]]) -> str:
         ctx.append(meta + "\n" + (pl.get("text") or ""))
 
     context_block = "\n\n".join(ctx)
+
+    if is_counseling:
+        return f"""당신은 심리상담 전문 문서 도우미입니다.
+아래 '근거'(실제 상담 사례 요약 및 대화록)만 사용해서 질문에 답하세요.
+- 근거에 없는 내용은 '근거 부족'이라고 말하세요.
+- 내담자 프라이버시를 보호하며 익명으로 설명하세요.
+- 답변은 간결하게, 핵심만 bullet로 작성하세요.
+- 마지막에 [근거]로 어떤 번호를 참고했는지 표시하세요.
+- 이 정보는 연구/교육 목적이며 전문 치료를 대체하지 않음을 명시하세요.
+
+[질문]
+{question}
+
+[근거]
+{context_block}
+"""
     return f"""당신은 의료/법률 문서 도우미입니다.
 아래 '근거'만 사용해서 질문에 답하세요.
 - 근거에 없는 내용은 '근거 부족'이라고 말하세요.
@@ -284,6 +306,14 @@ async def ask(req: AskRequest, db: Session = Depends(get_db)):
             )
     else:
         answer = fallback_answer(req.query, hits)
+
+    # 심리상담 도메인 응답 시 면책 고지 추가
+    counseling_domains = {"우울증", "불안장애", "중독", "일반군"}
+    if req.domain in counseling_domains:
+        answer = (
+            "[※ 이 응답은 상담 연구 데이터 기반 정보 제공이며, 전문 치료를 대체하지 않습니다.]\n\n"
+            + answer
+        )
 
     await _persist_query(db, req, used, answer, success=success)
 

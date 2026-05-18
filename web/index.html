@@ -3,232 +3,277 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Med RAG Web App</title>
+  <title>심리상담·의료·법률 RAG</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <meta name="color-scheme" content="light">
+  <style>
+    /* ── 3단 PC 레이아웃 ───────────────────────────── */
+    @media (min-width: 1280px) {
+      #appShell        { display: grid; grid-template-columns: 280px 1fr 380px; grid-template-rows: auto 1fr; height: 100vh; }
+      #topBar          { grid-column: 1 / -1; }
+      #leftPanel       { display: flex !important; position: static; transform: none !important; width: 280px; box-shadow: none; border-right: 1px solid #e7e5e4; }
+      #mainPanel       { overflow-y: auto; }
+      #rightPanel      { display: flex !important; position: static; transform: none !important; width: 380px; box-shadow: none; border-left: 1px solid #e7e5e4; }
+      #leftBackdrop,
+      #rightBackdrop   { display: none !important; }
+      #btnOpenLeft,
+      #btnOpenRight    { display: none !important; }
+      #btnOpenRightMd  { display: none !important; }
+    }
+    /* ── 2단 태블릿 레이아웃 ───────────────────────── */
+    @media (min-width: 768px) and (max-width: 1279px) {
+      #appShell        { display: grid; grid-template-columns: 1fr 340px; grid-template-rows: auto 1fr; height: 100vh; }
+      #topBar          { grid-column: 1 / -1; }
+      #leftPanel       { display: none; }
+      #mainPanel       { overflow-y: auto; }
+      #rightPanel      { display: flex !important; position: static; transform: none !important; width: 340px; box-shadow: none; border-left: 1px solid #e7e5e4; }
+      #rightBackdrop   { display: none !important; }
+      #btnOpenRight    { display: none !important; }
+      #btnOpenRightMd  { display: none !important; }
+    }
+    /* ── 1단 모바일 ───────────────────────────────── */
+    @media (max-width: 767px) {
+      #appShell        { display: flex; flex-direction: column; height: 100vh; }
+      #mainPanel       { flex: 1; overflow-y: auto; }
+      #leftPanel       { position: fixed; inset-y: 0; left: 0; z-index: 50; display: flex; flex-direction: column; width: 80vw; max-width: 320px; transform: translateX(-100%); transition: transform 0.3s; background: white; box-shadow: 0 25px 50px -12px rgb(0 0 0/.25); }
+      #leftPanel.open  { transform: translateX(0); }
+      #rightPanel      { position: fixed; inset-y: 0; right: 0; z-index: 50; display: flex; flex-direction: column; width: 92vw; max-width: 420px; transform: translateX(100%); transition: transform 0.3s; background: white; box-shadow: 0 25px 50px -12px rgb(0 0 0/.25); }
+      #rightPanel.open { transform: translateX(0); }
+    }
+  </style>
 </head>
-<body class="min-h-screen bg-stone-100 text-stone-900">
-  <div id="sidebarBackdrop" class="fixed inset-0 z-40 hidden bg-stone-900/40 backdrop-blur-sm"></div>
-  <div id="evidenceBackdrop" class="fixed inset-0 z-40 hidden bg-stone-900/30 backdrop-blur-sm"></div>
+<body class="bg-stone-100 text-stone-900 antialiased">
 
-  <aside id="sidebar" class="fixed inset-y-0 left-0 z-50 flex w-80 -translate-x-full flex-col border-r border-stone-200 bg-white shadow-2xl transition-transform duration-300">
-    <div class="flex items-center gap-3 border-b border-stone-200 px-5 py-5">
-      <div class="grid h-11 w-11 place-items-center rounded-2xl bg-emerald-600 text-sm font-bold text-white">MR</div>
-      <div>
-        <div class="font-semibold">Med RAG Workspace</div>
-        <div class="text-xs text-stone-500">의료·법률 문서 질의 앱</div>
+<!-- 배경막 -->
+<div id="leftBackdrop"  class="fixed inset-0 z-40 hidden bg-stone-900/40 backdrop-blur-sm"></div>
+<div id="rightBackdrop" class="fixed inset-0 z-40 hidden bg-stone-900/40 backdrop-blur-sm"></div>
+
+<div id="appShell">
+
+  <!-- ═══════════════════════════════════════════════════
+       상단 헤더 (topBar)
+  ═══════════════════════════════════════════════════ -->
+  <header id="topBar" class="z-30 border-b border-stone-200 bg-white/95 backdrop-blur sticky top-0">
+    <div class="flex items-center gap-3 px-4 py-3">
+
+      <!-- 왼쪽 패널 열기 (모바일 + 태블릿) -->
+      <button id="btnOpenLeft" class="rounded-xl border border-stone-200 bg-white p-2 text-stone-700 shadow-sm hover:bg-stone-50 xl:hidden" aria-label="메뉴">
+        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7h16M4 12h16M4 17h16"/>
+        </svg>
+      </button>
+
+      <!-- 로고 -->
+      <div class="flex items-center gap-2.5 min-w-0">
+        <div class="hidden h-9 w-9 shrink-0 place-items-center rounded-xl bg-indigo-600 text-xs font-bold text-white sm:grid">RAG</div>
+        <div class="min-w-0">
+          <div class="text-[10px] font-semibold tracking-widest text-indigo-600 sm:text-xs">MIND · MED · LAW</div>
+          <div class="truncate text-sm font-semibold text-stone-900 sm:text-base">심리상담·의료·법률 문서 검색</div>
+        </div>
       </div>
-      <button id="btnCloseSidebar" class="ml-auto rounded-xl p-2 text-stone-500 hover:bg-stone-100 hover:text-stone-900" aria-label="메뉴 닫기">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 18L18 6M6 6l12 12" />
+
+      <!-- PC 네비 -->
+      <nav class="ml-auto hidden items-center gap-5 text-sm text-stone-600 xl:flex">
+        <a href="#workspace" class="hover:text-stone-900">Workspace</a>
+        <a href="#settings"  class="hover:text-stone-900">Settings</a>
+        <a id="btnHealth" href="#" target="_blank" rel="noreferrer" class="rounded-xl border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium hover:bg-stone-50">헬스체크</a>
+        <button id="btnSettings" class="rounded-xl bg-stone-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-stone-700">API 설정</button>
+      </nav>
+
+      <!-- 태블릿: 오른쪽 패널 토글 없음(항상 표시) / 모바일: 근거 버튼 -->
+      <div class="ml-auto flex items-center gap-2 xl:hidden">
+        <button id="btnOpenRight" class="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-900 hover:bg-indigo-100 md:hidden" aria-label="근거 보기">근거</button>
+        <a id="btnHealthMobile" href="#" target="_blank" rel="noreferrer" class="hidden rounded-xl border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium hover:bg-stone-50 sm:block xl:hidden">헬스</a>
+        <button id="btnSettingsMobile" class="rounded-xl bg-stone-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-stone-700 xl:hidden">설정</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════════════════════════
+       왼쪽 패널 (leftPanel) — PC 고정, 모/태블릿 오프캔버스
+  ═══════════════════════════════════════════════════ -->
+  <aside id="leftPanel" class="flex-col overflow-y-auto bg-white">
+    <div class="flex items-center gap-2 border-b border-stone-100 px-4 py-4">
+      <div class="h-8 w-8 shrink-0 grid place-items-center rounded-xl bg-indigo-600 text-xs font-bold text-white">RAG</div>
+      <span class="text-sm font-semibold text-stone-800">워크스페이스</span>
+      <button id="btnCloseLeft" class="ml-auto rounded-lg p-1.5 text-stone-400 hover:bg-stone-100 xl:hidden" aria-label="닫기">
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
         </svg>
       </button>
     </div>
 
-    <div class="space-y-6 overflow-y-auto px-5 py-5">
+    <div class="space-y-5 px-4 py-4">
+      <!-- 도메인 선택 -->
       <section>
-        <div class="text-xs font-semibold uppercase tracking-[0.2em] text-stone-400">Quick Start</div>
-        <div class="mt-3 rounded-3xl bg-stone-100 p-4 text-sm leading-6 text-stone-700">
-          현재 예시 질문은 법률 문서를 기준으로 설정되어 있습니다. 좌측 메뉴에서 예시 질문을 다시 불러오거나 최근 질문을 재사용할 수 있습니다.
+        <div class="text-[10px] font-semibold uppercase tracking-widest text-stone-400">도메인</div>
+        <div id="domainTabs" class="mt-2 grid grid-cols-1 gap-1.5">
+          <!-- JS 로 생성 -->
         </div>
       </section>
 
+      <!-- 근거 개수 -->
       <section>
-        <div class="text-xs font-semibold uppercase tracking-[0.2em] text-stone-400">예시 질문</div>
-        <button id="btnUseExample" class="mt-3 w-full rounded-3xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-left text-sm font-medium leading-6 text-emerald-900 transition hover:border-emerald-300 hover:bg-emerald-100">
-          근로자 4인 이하 사업장에 근로기준법 일부만 적용되는 것이 왜 문제 되었나요?
+        <div class="text-[10px] font-semibold uppercase tracking-widest text-stone-400">근거 개수</div>
+        <select id="topK" class="mt-2 w-full rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100">
+          <option value="3">3개</option>
+          <option value="4" selected>4개</option>
+          <option value="5">5개</option>
+          <option value="6">6개</option>
+        </select>
+      </section>
+
+      <!-- 예시 질문 -->
+      <section>
+        <div class="text-[10px] font-semibold uppercase tracking-widest text-stone-400">예시 질문</div>
+        <button id="btnUseExample" class="mt-2 w-full rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-3 text-left text-xs leading-5 text-indigo-900 transition hover:border-indigo-200 hover:bg-indigo-100">
         </button>
       </section>
 
+      <!-- 최근 질문 -->
       <section>
         <div class="flex items-center">
-          <div class="text-xs font-semibold uppercase tracking-[0.2em] text-stone-400">최근 질문</div>
-          <button id="btnClearHistory" class="ml-auto text-xs font-medium text-stone-500 hover:text-stone-900">비우기</button>
+          <div class="text-[10px] font-semibold uppercase tracking-widest text-stone-400">최근 질문</div>
+          <button id="btnClearHistory" class="ml-auto text-[10px] font-medium text-stone-400 hover:text-stone-700">비우기</button>
         </div>
-        <div id="historyList" class="mt-3 space-y-2"></div>
+        <div id="historyList" class="mt-2 space-y-1.5"></div>
       </section>
 
-      <section class="rounded-3xl border border-stone-200 bg-stone-50 p-4">
-        <div class="text-sm font-semibold text-stone-900">연결 도구</div>
-        <div class="mt-3 flex flex-wrap gap-2">
-          <a id="btnHealthMobile" href="#" class="rounded-2xl bg-stone-900 px-3 py-2 text-xs font-medium text-white hover:bg-stone-700">헬스체크</a>
-          <button id="btnSettingsMobile" class="rounded-2xl border border-stone-200 bg-white px-3 py-2 text-xs font-medium hover:bg-stone-100">API 설정</button>
+      <!-- 연결 -->
+      <section class="rounded-xl border border-stone-100 bg-stone-50 p-3">
+        <div class="text-xs font-semibold text-stone-700">연결 도구</div>
+        <div class="mt-2 flex flex-wrap gap-2">
+          <a id="btnHealthLeft" href="#" target="_blank" rel="noreferrer" class="rounded-lg bg-stone-800 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-stone-700">헬스체크</a>
+          <button id="btnSettingsLeft" class="rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-xs font-medium hover:bg-stone-100">API 설정</button>
         </div>
       </section>
     </div>
   </aside>
 
-  <aside id="evidencePanel" class="fixed inset-y-0 right-0 z-50 flex w-full max-w-md translate-x-full flex-col border-l border-stone-200 bg-white shadow-2xl transition-transform duration-300">
-    <div class="flex items-center gap-3 border-b border-stone-200 px-5 py-5">
-      <div>
-        <div class="text-xs font-semibold uppercase tracking-[0.2em] text-stone-400">Evidence</div>
-        <div class="mt-1 text-lg font-semibold text-stone-900">근거 문단</div>
+  <!-- ═══════════════════════════════════════════════════
+       중앙 메인 패널 (mainPanel)
+  ═══════════════════════════════════════════════════ -->
+  <main id="mainPanel" class="bg-stone-100">
+    <div class="mx-auto max-w-2xl space-y-4 p-4 sm:p-5">
+
+      <!-- 히어로 헤더 -->
+      <div class="overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-700 via-indigo-600 to-violet-600 px-5 py-6 text-white sm:px-6">
+        <div class="text-[10px] font-semibold uppercase tracking-widest text-indigo-200">Case Prompt</div>
+        <h1 id="heroTitle" class="mt-2 text-lg font-semibold leading-snug sm:text-xl">도메인을 선택하고 질문을 입력하세요.</h1>
+        <p id="heroDesc" class="mt-2 text-xs leading-5 text-indigo-100/90 sm:text-sm"></p>
       </div>
-      <div id="citationCountPanel" class="ml-auto rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">0건</div>
-      <button id="btnCloseEvidence" class="rounded-xl p-2 text-stone-500 hover:bg-stone-100 hover:text-stone-900" aria-label="근거 닫기">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 18L18 6M6 6l12 12" />
+
+      <!-- 질문 입력 -->
+      <section id="workspace" class="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
+        <label for="queryInput" class="text-xs font-semibold uppercase tracking-widest text-stone-400">질문 입력</label>
+        <textarea id="queryInput" rows="5"
+          class="mt-2 w-full resize-none rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm leading-7 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+          placeholder="질문을 입력하거나 좌측 예시 질문을 클릭하세요."></textarea>
+
+        <div class="mt-3 flex flex-wrap gap-2">
+          <button id="btnSubmit" class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">질문 보내기</button>
+          <button id="btnExample" class="rounded-xl border border-stone-200 bg-white px-4 py-2 text-sm font-medium hover:bg-stone-50">예시 넣기</button>
+          <button id="btnResetQuery" class="rounded-xl border border-stone-200 bg-white px-4 py-2 text-sm font-medium hover:bg-stone-50">입력 비우기</button>
+          <button id="btnOpenRightMd" class="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-900 hover:bg-indigo-100 md:hidden">근거 보기</button>
+        </div>
+
+        <div id="status" class="mt-3 hidden rounded-xl border px-3 py-2 text-xs"></div>
+      </section>
+
+      <!-- 응답 -->
+      <section class="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="text-[10px] font-semibold uppercase tracking-widest text-stone-400">Answer</div>
+          <div id="usedCollectionBadge" class="ml-auto rounded-full bg-stone-100 px-2.5 py-0.5 text-[10px] font-medium text-stone-500">collection: -</div>
+        </div>
+        <div id="answerBox" class="mt-3 rounded-xl bg-stone-50 p-4 text-sm leading-7 text-stone-600">
+          질문을 보내면 여기에서 답변을 확인할 수 있습니다.
+        </div>
+        <div class="mt-3 flex items-center gap-2">
+          <button id="btnOpenEvidenceFromAnswer" class="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-900 hover:bg-indigo-100 md:hidden">근거 보기</button>
+          <div id="citationCount" class="rounded-full bg-indigo-50 px-2.5 py-0.5 text-[10px] font-medium text-indigo-700">0건</div>
+        </div>
+      </section>
+
+      <!-- 전송 데이터 미리보기 -->
+      <section class="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
+        <div class="text-[10px] font-semibold uppercase tracking-widest text-stone-400">Request Preview</div>
+        <pre id="requestPreview" class="mt-3 overflow-x-auto rounded-xl bg-stone-50 p-3 text-[10px] leading-5 text-stone-600 sm:text-xs"></pre>
+      </section>
+
+      <footer class="py-4 text-center text-[10px] text-stone-400">
+        Mind · Med · Law RAG — Tailwind CSS · FastAPI
+      </footer>
+    </div>
+  </main>
+
+  <!-- ═══════════════════════════════════════════════════
+       오른쪽 근거 패널 (rightPanel) — PC/태블릿 고정, 모바일 오프캔버스
+  ═══════════════════════════════════════════════════ -->
+  <aside id="rightPanel" class="flex-col bg-white">
+    <div class="flex shrink-0 items-center gap-2 border-b border-stone-100 px-4 py-4">
+      <div>
+        <div class="text-[10px] font-semibold uppercase tracking-widest text-stone-400">Evidence</div>
+        <div class="mt-0.5 text-sm font-semibold text-stone-900">근거 문단</div>
+      </div>
+      <div id="citationCountPanel" class="ml-auto rounded-full bg-indigo-50 px-2.5 py-0.5 text-[10px] font-medium text-indigo-700">0건</div>
+      <button id="btnCloseRight" class="ml-1 rounded-lg p-1.5 text-stone-400 hover:bg-stone-100 md:hidden" aria-label="닫기">
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
         </svg>
       </button>
     </div>
-    <div id="citations" class="flex-1 space-y-4 overflow-y-auto px-5 py-5">
-      <div class="rounded-[1.5rem] border border-dashed border-stone-300 px-5 py-6 text-sm leading-6 text-stone-500">
+    <div id="citations" class="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+      <div class="rounded-xl border border-dashed border-stone-200 px-4 py-5 text-xs leading-5 text-stone-400">
         아직 조회된 근거가 없습니다.
       </div>
     </div>
   </aside>
 
-  <div class="min-h-screen pb-24">
-    <header class="sticky top-0 z-30 border-b border-stone-200 bg-white/90 backdrop-blur">
-      <div class="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:px-6">
-        <button id="btnOpenSidebar" class="rounded-2xl border border-stone-200 bg-white p-2.5 text-stone-700 shadow-sm transition hover:bg-stone-50" aria-label="메뉴 열기">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7h16M4 12h16M4 17h16" />
+</div><!-- /appShell -->
+
+<!-- ── API 설정 모달 ────────────────────────────── -->
+<div id="modal" class="fixed inset-0 z-[60] hidden">
+  <div class="absolute inset-0 bg-stone-900/30"></div>
+  <div class="absolute inset-0 grid place-items-center p-4">
+    <div class="w-full max-w-md rounded-2xl border border-stone-200 bg-white shadow-2xl">
+      <div class="flex items-center border-b border-stone-100 px-5 py-4">
+        <div id="settings" class="text-sm font-semibold text-stone-900">API 설정</div>
+        <button id="btnClose" class="ml-auto rounded-lg p-1.5 text-stone-400 hover:bg-stone-100" aria-label="닫기">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
           </svg>
         </button>
-
-        <div class="min-w-0">
-          <div class="text-[11px] font-semibold tracking-[0.18em] text-emerald-700 sm:text-sm">MED RAG APP</div>
-          <div class="truncate text-base font-semibold text-stone-900 sm:text-lg">법률·의료 문서 검색 웹앱</div>
-        </div>
-
-        <nav class="ml-auto hidden items-center gap-6 text-sm text-stone-600 md:flex">
-          <a href="#workspace" class="hover:text-stone-900">Workspace</a>
-          <a href="#evidence" class="hover:text-stone-900">Evidence</a>
-          <a href="#settings" class="hover:text-stone-900">Settings</a>
-        </nav>
-
-        <div class="hidden items-center gap-2 md:flex">
-          <button id="btnOpenEvidenceHeader" class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-900 hover:bg-emerald-100">근거 보기</button>
-          <a id="btnHealth" href="#" class="rounded-2xl border border-stone-200 bg-white px-4 py-2 text-sm font-medium hover:bg-stone-100">헬스체크</a>
-          <button id="btnSettings" class="rounded-2xl bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700">API 설정</button>
-        </div>
       </div>
-    </header>
-
-    <main class="mx-auto max-w-4xl px-4 py-4 sm:px-6 sm:py-6">
-      <section class="space-y-4 sm:space-y-6">
-          <section class="overflow-hidden rounded-[2rem] border border-stone-200 bg-white shadow-sm">
-            <div class="border-b border-stone-200 bg-gradient-to-br from-emerald-700 via-emerald-600 to-teal-600 px-5 py-6 text-white sm:px-6 sm:py-7">
-              <div class="max-w-3xl">
-                <div class="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-100">Case Prompt</div>
-                <h1 class="mt-3 text-xl font-semibold leading-tight sm:text-3xl">모바일에서도 빠르게 질문하고, 근거는 필요할 때 우측 패널에서 확인하세요.</h1>
-                <p class="mt-3 text-sm leading-6 text-emerald-50/90">
-                  예시 질문은 현재 법률 데이터셋에 맞춰 설정했습니다. 도메인을 고른 뒤 질문을 보정하거나 그대로 전송할 수 있습니다.
-                </p>
-              </div>
-            </div>
-
-            <div id="workspace" class="p-4 sm:p-6">
-              <div class="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label for="domainSelect" class="text-sm font-medium text-stone-700">도메인</label>
-                  <select id="domainSelect" class="mt-2 w-full rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200">
-                    <option value="02.법률">02.법률</option>
-                    <option value="01.의료">01.의료</option>
-                    <option value="">전체 검색</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label for="topK" class="text-sm font-medium text-stone-700">근거 개수</label>
-                  <select id="topK" class="mt-2 w-full rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200">
-                    <option value="3">3개</option>
-                    <option value="4" selected>4개</option>
-                    <option value="5">5개</option>
-                    <option value="6">6개</option>
-                  </select>
-                </div>
-              </div>
-
-              <div class="mt-5">
-                <label for="queryInput" class="text-sm font-medium text-stone-700">질문</label>
-                <textarea id="queryInput" rows="6" class="mt-2 w-full rounded-[1.75rem] border border-stone-200 bg-stone-50 px-4 py-4 text-sm leading-7 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200 sm:px-5"></textarea>
-                <div class="mt-3 grid gap-2 sm:flex sm:flex-wrap sm:items-center">
-                  <button id="btnSubmit" class="w-full rounded-2xl bg-stone-900 px-5 py-3 text-sm font-medium text-white hover:bg-stone-700 sm:w-auto">질문 보내기</button>
-                  <button id="btnOpenEvidence" class="w-full rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-3 text-sm font-medium text-emerald-900 hover:bg-emerald-100 sm:w-auto">근거 패널 열기</button>
-                  <button id="btnExample" class="w-full rounded-2xl border border-stone-200 bg-white px-5 py-3 text-sm font-medium hover:bg-stone-100 sm:w-auto">예시 질문 다시 넣기</button>
-                  <button id="btnResetQuery" class="w-full rounded-2xl border border-stone-200 bg-white px-5 py-3 text-sm font-medium hover:bg-stone-100 sm:w-auto">입력 비우기</button>
-                </div>
-              </div>
-
-              <div id="status" class="mt-4 hidden rounded-2xl border px-4 py-3 text-sm"></div>
-            </div>
-          </section>
-
-          <section class="rounded-[2rem] border border-stone-200 bg-white p-4 shadow-sm sm:p-6">
-            <div class="flex flex-wrap items-center gap-3">
-              <div>
-                <div class="text-xs font-semibold uppercase tracking-[0.2em] text-stone-400">Answer</div>
-                <h2 class="mt-2 text-xl font-semibold text-stone-900">응답 결과</h2>
-              </div>
-              <div id="usedCollectionBadge" class="ml-auto rounded-full bg-stone-100 px-3 py-1 text-xs font-medium text-stone-600">collection: -</div>
-            </div>
-            <div id="answerBox" class="mt-5 rounded-[1.75rem] bg-stone-100 p-4 text-sm leading-7 text-stone-600 sm:p-5">
-              질문을 보내면 여기에서 답변을 확인할 수 있습니다.
-            </div>
-            <div class="mt-4 flex items-center gap-3">
-              <button id="btnOpenEvidenceFromAnswer" class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-900 hover:bg-emerald-100">근거 보기</button>
-              <div id="citationCount" class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">0건</div>
-            </div>
-          </section>
-
-          <section class="rounded-[2rem] border border-stone-200 bg-white p-4 shadow-sm sm:p-6">
-            <div class="text-xs font-semibold uppercase tracking-[0.2em] text-stone-400">Request Preview</div>
-            <h2 class="mt-2 text-xl font-semibold text-stone-900">전송 데이터</h2>
-            <pre id="requestPreview" class="mt-5 overflow-x-auto rounded-[1.5rem] bg-stone-100 p-4 text-xs leading-6 text-stone-700"></pre>
-          </section>
-      </section>
-    </main>
-
-    <footer class="border-t border-stone-200 bg-white">
-      <div class="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-5 text-sm text-stone-500 sm:px-6 lg:flex-row lg:items-center">
-        <div>Med RAG Web App</div>
-        <div class="lg:ml-auto">Tailwind 기반 앱 셸, 좌측 오프캔버스 메뉴, GNB, 근거 카드형 응답 UI</div>
-      </div>
-    </footer>
-  </div>
-
-  <div id="modal" class="fixed inset-0 z-[60] hidden">
-    <div class="absolute inset-0 bg-stone-900/35"></div>
-    <div class="absolute inset-0 grid place-items-center p-4">
-      <div class="w-full max-w-lg rounded-[2rem] border border-stone-200 bg-white shadow-2xl">
-        <div class="flex items-center border-b border-stone-200 px-6 py-5">
-          <div id="settings" class="font-semibold text-stone-900">API 설정</div>
-          <button id="btnClose" class="ml-auto rounded-xl p-2 text-stone-500 hover:bg-stone-100 hover:text-stone-900" aria-label="설정 닫기">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+      <div class="space-y-4 px-5 py-5">
+        <p class="text-xs leading-5 text-stone-500">API Base URL을 저장하면 <code class="rounded bg-stone-100 px-1">/ask</code>와 <code class="rounded bg-stone-100 px-1">/healthz</code> 호출에 사용합니다.</p>
+        <div>
+          <label for="apiBase" class="text-xs font-medium text-stone-700">API Base URL</label>
+          <input id="apiBase" type="text" placeholder="http://localhost:8000"
+            class="mt-1.5 w-full rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"/>
         </div>
-        <div class="space-y-5 px-6 py-6">
-          <div class="text-sm leading-6 text-stone-600">
-            API Base URL을 저장하면 `/ask` 와 `/healthz` 호출에 사용합니다. 비워두면 현재 origin 기준 상대 경로를 사용합니다.
-          </div>
-
-          <div>
-            <label for="apiBase" class="text-sm font-medium text-stone-700">API Base URL</label>
-            <input id="apiBase" type="text" placeholder="예) http://localhost:8000" class="mt-2 w-full rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200" />
-          </div>
-
-          <div>
-            <label for="defaultDomain" class="text-sm font-medium text-stone-700">기본 도메인</label>
-            <select id="defaultDomain" class="mt-2 w-full rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200">
-              <option value="02.법률">02.법률</option>
-              <option value="01.의료">01.의료</option>
-              <option value="">전체 검색</option>
-            </select>
-          </div>
-
-          <div class="flex flex-wrap gap-2">
-            <button id="btnSave" class="rounded-2xl bg-stone-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-stone-700">저장</button>
-            <button id="btnReset" class="rounded-2xl border border-stone-200 bg-white px-4 py-2.5 text-sm font-medium hover:bg-stone-100">초기화</button>
-          </div>
+        <div>
+          <label for="defaultDomain" class="text-xs font-medium text-stone-700">기본 도메인</label>
+          <select id="defaultDomain"
+            class="mt-1.5 w-full rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100">
+            <option value="02.법률">02.법률</option>
+            <option value="01.의료">01.의료</option>
+            <option value="우울증">우울증</option>
+            <option value="불안장애">불안장애</option>
+            <option value="중독">중독</option>
+            <option value="일반군">일반군</option>
+            <option value="">전체 검색</option>
+          </select>
+        </div>
+        <div class="flex gap-2">
+          <button id="btnSave" class="rounded-xl bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700">저장</button>
+          <button id="btnReset" class="rounded-xl border border-stone-200 bg-white px-4 py-2 text-sm font-medium hover:bg-stone-50">초기화</button>
         </div>
       </div>
     </div>
   </div>
+</div>
 
-  <script src="./app.js"></script>
+<script src="./app.js"></script>
 </body>
 </html>
