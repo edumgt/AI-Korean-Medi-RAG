@@ -3,10 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
-import hashlib
-import math
 from contextlib import asynccontextmanager
-from urllib import parse as urllib_parse, request as urllib_request
 from collections import Counter
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional
@@ -454,48 +451,3 @@ async def query_logs_recent(limit: int = 20):
 
 
 app.mount("/", StaticFiles(directory="web", html=True), name="web")
-
-def collection_exists(name: str) -> bool:
-    return True
-
-
-def hashed_embedding(text: str, dim: int = 384) -> List[float]:
-    vec = [0.0] * dim
-    for token in re.findall(r"[0-9A-Za-z가-힣]+", (text or "").lower()):
-        if len(token) < 2:
-            continue
-        digest = hashlib.sha256(token.encode("utf-8")).digest()
-        idx = int.from_bytes(digest[:4], "big") % dim
-        sign = -1.0 if digest[4] % 2 else 1.0
-        weight = 1.0 + (digest[5] / 255.0)
-        vec[idx] += sign * weight
-    norm = math.sqrt(sum(v * v for v in vec))
-    return vec if norm == 0 else [v / norm for v in vec]
-
-
-def qdrant_hits(collection_name: str, query: str, top_k: int) -> List[Dict[str, Any]]:
-    url = os.environ.get("QDRANT_URL", "http://qdrant:6333")
-    path = urllib_parse.quote(collection_name, safe="")
-    body = json.dumps({"vector": hashed_embedding(query), "limit": top_k, "with_payload": True}).encode("utf-8")
-    req = urllib_request.Request(
-        f"{url}/collections/{path}/points/search",
-        data=body,
-        headers={"Content-Type": "application/json"},
-    )
-    try:
-        with urllib_request.urlopen(req, timeout=10) as resp:
-            data = json.load(resp)
-    except Exception:
-        return []
-    hits = []
-    for item in data.get("result", []):
-        hits.append({"score": float(item.get("score") or 0.0), "payload": item.get("payload") or {}})
-    return hits
-
-
-def search_chunks(domain_name: Optional[str], query: str, top_k: int) -> List[Dict[str, Any]]:
-    if domain_name:
-        hits = qdrant_hits(normalize_collection_name(domain_name), query, top_k)
-        if hits:
-            return hits
-    return qdrant_hits("med_all", query, top_k)
