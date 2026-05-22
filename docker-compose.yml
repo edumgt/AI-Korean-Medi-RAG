@@ -14,56 +14,8 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://medrag:medrag@postgres:5432/medrag}
       MONGO_URL: ${MONGO_URL:-mongodb://mongo:27017}
       MONGO_DB: ${MONGO_DB:-med_rag}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      mongo:
-        condition: service_healthy
     networks:
     - shared-net
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: medrag
-      POSTGRES_PASSWORD: medrag
-      POSTGRES_DB: medrag
-    volumes:
-    - postgres_data:/var/lib/postgresql/data
-    ports:
-    - 5432:5432
-    healthcheck:
-      test:
-      - CMD-SHELL
-      - pg_isready -U medrag -d medrag
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-    - shared-net
-  mongo:
-    image: mongo:7
-    restart: unless-stopped
-    environment:
-      MONGO_INITDB_DATABASE: med_rag
-    volumes:
-    - mongo_data:/data/db
-    ports:
-    - 27017:27017
-    healthcheck:
-      test:
-      - CMD
-      - mongosh
-      - --eval
-      - db.adminCommand('ping')
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-    - shared-net
-volumes:
-  postgres_data: null
-  mongo_data: null
 networks:
   shared-net:
-    driver: bridge
+    external: true
