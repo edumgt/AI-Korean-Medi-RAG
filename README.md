@@ -1,3 +1,5 @@
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+
 # Mind · Med · Law RAG (심리상담·의료·법률 도메인 RAG + 자동평가)
 
 ## AI 학습 데이터는 AI Hub 공공기관 사이트에서 다운로드 가능합니다.
@@ -10,7 +12,7 @@
 - (3) PC/태블릿/모바일 **반응형 3단 웹 UI** 로 질의·근거 조회를 지원하며
 - (4) 라벨링 QA로 **자동 평가(Eval)** 를 돌릴 수 있는 MVP입니다.
 
-> ✅ “폴더 = 도메인” 구조를 그대로 활용하도록 설계했습니다.
+> <i class="fa-solid fa-circle-check"></i> “폴더 = 도메인” 구조를 그대로 활용하도록 설계했습니다.
 
 지원 도메인: `02.법률` | `01.의료` | `우울증` | `불안장애` | `중독` | `일반군`
 
