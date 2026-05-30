@@ -8,3 +8,5 @@ qdrant_data/
 *.db
 *.env
 .claude/
+
+travel/

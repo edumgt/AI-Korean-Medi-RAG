@@ -26,12 +26,21 @@ from .db.mongo import (
     log_query_mongo,
     mongo_ping,
 )
+from .db.qdrant import (
+    qdrant_ping,
+    qdrant_point_count,
+    qdrant_search,
+    QDRANT_URL,
+    QDRANT_COLLECTION,
+)
 
 load_dotenv()
 
-DATA_PATH = Path(os.environ.get("DOCS_PATH", "data/documents.jsonl")).expanduser().resolve()
-LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "none").lower()  # none | openai
+DATA_PATH    = Path(os.environ.get("DOCS_PATH", "data/documents.jsonl")).expanduser().resolve()
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "none").lower()   # none | openai
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+# Qdrant 를 기본 검색 엔진으로 사용. 연결 실패 시 in-memory BM25 로 폴백.
+USE_QDRANT   = os.environ.get("USE_QDRANT", "true").lower() != "false"
 
 
 # ── 애플리케이션 라이프사이클 ─────────────────────────────────────────────────
@@ -109,9 +118,11 @@ def load_documents(path: Path) -> List[Dict[str, Any]]:
 
 
 DOC_CHUNKS = load_documents(DATA_PATH)
+# Qdrant 에 직접 인제스트된 도메인(JSONL 외)도 여기에 등록
+EXTRA_DOMAINS = {"여행"}
 KNOWN_COLLECTIONS = {"med_all"} | {
     normalize_collection_name(chunk["domain_name"]) for chunk in DOC_CHUNKS if chunk.get("domain_name")
-}
+} | {normalize_collection_name(d) for d in EXTRA_DOMAINS}
 
 
 class AskRequest(BaseModel):
@@ -155,49 +166,84 @@ def collection_exists(name: str) -> bool:
     return name in KNOWN_COLLECTIONS
 
 
-def search_chunks(domain_name: Optional[str], query: str, top_k: int) -> List[Dict[str, Any]]:
-    q_tokens = tokenize(query)
+def _bm25_search(domain_name: Optional[str], query: str, top_k: int) -> List[Dict[str, Any]]:
+    """In-memory BM25/fuzzy 폴백 검색."""
+    q_tokens   = tokenize(query)
     query_norm = " ".join((query or "").split())
 
     candidates = DOC_CHUNKS
     if domain_name:
-        candidates = [chunk for chunk in DOC_CHUNKS if chunk["domain_name"] == domain_name]
+        candidates = [c for c in DOC_CHUNKS if c["domain_name"] == domain_name]
 
     scored = []
     for chunk in candidates:
-        excerpt = chunk["text"]
-        overlap = len(q_tokens & chunk["tokens"])
+        overlap     = len(q_tokens & chunk["tokens"])
         token_score = overlap * 20
-        partial = fuzz.partial_ratio(query_norm, excerpt) if query_norm else 0
-        score = token_score + partial
+        partial     = fuzz.partial_ratio(query_norm, chunk["text"]) if query_norm else 0
+        score       = token_score + partial
         if score <= 0:
             continue
         scored.append({"score": float(score), "payload": chunk})
 
-    scored.sort(key=lambda item: item["score"], reverse=True)
+    scored.sort(key=lambda x: x["score"], reverse=True)
     return scored[:top_k]
 
 
+async def search_chunks(domain_name: Optional[str], query: str, top_k: int) -> List[Dict[str, Any]]:
+    """Qdrant 벡터 검색 우선, 실패 시 BM25 폴백."""
+    if USE_QDRANT:
+        try:
+            results = await qdrant_search(query, domain_name, top_k)
+            if results:
+                return results
+        except Exception as e:
+            pass  # 폴백
+    return _bm25_search(domain_name, query, top_k)
+
+
 COUNSELING_DOMAINS = {"우울증", "불안장애", "중독", "일반군"}
+TRAVEL_DOMAINS     = {"여행"}
 
 
 def build_prompt(question: str, hits: List[Dict[str, Any]]) -> str:
     ctx = []
-    domain_name = hits[0]["payload"].get("domain_name", "") if hits else ""
+    domain_name   = hits[0]["payload"].get("domain_name", "") if hits else ""
     is_counseling = domain_name in COUNSELING_DOMAINS
+    is_travel     = domain_name in TRAVEL_DOMAINS
 
     for i, h in enumerate(hits, start=1):
         pl = h["payload"]
-        meta = (
-            f"[{i}] doc_id={pl.get('doc_id')} "
-            f"domain={pl.get('domain_name')} "
-            f"source={pl.get('source_spec')} "
-            f"year={pl.get('creation_year')}"
-        )
+        if is_travel:
+            meta = f"[{i}] {pl.get('doc_id','')} | 주소: {pl.get('source_spec','')}"
+        else:
+            meta = (
+                f"[{i}] doc_id={pl.get('doc_id')} "
+                f"domain={pl.get('domain_name')} "
+                f"source={pl.get('source_spec')} "
+                f"year={pl.get('creation_year')}"
+            )
         ctx.append(meta + "\n" + (pl.get("text") or ""))
 
     context_block = "\n\n".join(ctx)
 
+    if is_travel:
+        return f"""당신은 한국 여행 전문 에이전트입니다.
+아래 '관광지 데이터'를 기반으로 사용자의 여행 질문에 친절하고 구체적으로 답하세요.
+
+답변 규칙:
+- 관광지명, 주소, 장소 유형, 만족도, 추천 의향, 평균 체류시간 등의 정보를 활용하세요.
+- 추천 이유를 구체적으로 설명하세요 (예: 만족도 높음, 체류시간 적당 등).
+- 가족여행/커플/혼자 등 여행 유형에 맞게 조언하세요.
+- bullet 형식으로 2~5개 장소를 추천하세요.
+- 마지막에 [참고 데이터]로 어떤 번호를 참고했는지 표시하세요.
+- 데이터에 없는 정보는 추측하지 마세요.
+
+[질문]
+{question}
+
+[관광지 데이터]
+{context_block}
+"""
     if is_counseling:
         return f"""당신은 심리상담 전문 문서 도우미입니다.
 아래 '근거'(실제 상담 사례 요약 및 대화록)만 사용해서 질문에 답하세요.
@@ -248,12 +294,29 @@ def call_openai(prompt: str) -> str:
 
 
 def fallback_answer(question: str, hits: List[Dict[str, Any]]) -> str:
-    lines = ["(LLM 미설정) 관련 근거를 아래에서 확인하세요.", "", "질문: " + question, "", "핵심 근거:"]
-    for i, h in enumerate(hits, start=1):
-        t = re.sub(r"\s+", " ", (h["payload"].get("text") or "")).strip()
-        lines.append(f"- [{i}] " + (t[:240] + ("..." if len(t) > 240 else "")))
-    lines.append("")
-    lines.append("[근거] " + ", ".join(f"[{i}]" for i in range(1, len(hits) + 1)))
+    domain_name = hits[0]["payload"].get("domain_name", "") if hits else ""
+    is_travel   = domain_name in TRAVEL_DOMAINS
+
+    if is_travel:
+        lines = ["(LLM 미설정) 관련 관광지 정보를 아래에서 확인하세요.", "", f"질문: {question}", "", "추천 관광지:"]
+        for i, h in enumerate(hits, start=1):
+            pl = h["payload"]
+            name = pl.get("place_name") or pl.get("doc_id", f"장소{i}")
+            addr = pl.get("address") or pl.get("source_spec") or ""
+            t    = re.sub(r"\s+", " ", (pl.get("text") or "")).strip()
+            lines.append(f"- [{i}] {name}")
+            if addr:
+                lines.append(f"       주소: {addr}")
+            lines.append("       " + t[:200] + ("..." if len(t) > 200 else ""))
+        lines.append("")
+        lines.append("[참고 데이터] " + ", ".join(f"[{i}]" for i in range(1, len(hits) + 1)))
+    else:
+        lines = ["(LLM 미설정) 관련 근거를 아래에서 확인하세요.", "", f"질문: {question}", "", "핵심 근거:"]
+        for i, h in enumerate(hits, start=1):
+            t = re.sub(r"\s+", " ", (h["payload"].get("text") or "")).strip()
+            lines.append(f"- [{i}] " + (t[:240] + ("..." if len(t) > 240 else "")))
+        lines.append("")
+        lines.append("[근거] " + ", ".join(f"[{i}]" for i in range(1, len(hits) + 1)))
     return "\n".join(lines)
 
 
@@ -269,7 +332,7 @@ async def ask(req: AskRequest, db: Session = Depends(get_db)):
             used = cand
             domain_name = req.domain
 
-    hits = search_chunks(domain_name, req.query, req.top_k)
+    hits = await search_chunks(domain_name, req.query, req.top_k)
 
     citations = []
     for h in hits:
@@ -305,8 +368,7 @@ async def ask(req: AskRequest, db: Session = Depends(get_db)):
         answer = fallback_answer(req.query, hits)
 
     # 심리상담 도메인 응답 시 면책 고지 추가
-    counseling_domains = {"우울증", "불안장애", "중독", "일반군"}
-    if req.domain in counseling_domains:
+    if req.domain in COUNSELING_DOMAINS:
         answer = (
             "[※ 이 응답은 상담 연구 데이터 기반 정보 제공이며, 전문 치료를 대체하지 않습니다.]\n\n"
             + answer
@@ -395,13 +457,19 @@ def openai_check(req: OpenAICheckRequest):
 
 
 @app.get("/healthz")
-def healthz():
+async def healthz():
+    qdrant_ok    = await qdrant_ping() if USE_QDRANT else None
+    qdrant_count = await qdrant_point_count() if USE_QDRANT else None
     return {
         "ok": True,
-        "docs_path": str(DATA_PATH),
-        "doc_chunks": len(DOC_CHUNKS),
-        "domains": dict(Counter(chunk["domain_name"] for chunk in DOC_CHUNKS)),
-        "llm_provider": LLM_PROVIDER,
+        "docs_path":     str(DATA_PATH),
+        "doc_chunks":    len(DOC_CHUNKS),
+        "domains":       dict(Counter(chunk["domain_name"] for chunk in DOC_CHUNKS)),
+        "llm_provider":  LLM_PROVIDER,
+        "qdrant_url":    QDRANT_URL,
+        "qdrant_ok":     qdrant_ok,
+        "qdrant_points": qdrant_count,
+        "search_engine": "qdrant" if (USE_QDRANT and qdrant_ok) else "bm25",
     }
 
 

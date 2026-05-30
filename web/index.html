@@ -7,224 +7,469 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <meta name="color-scheme" content="light">
   <style>
-    /* ── 3단 PC 레이아웃 ───────────────────────────── */
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #F0F0F0;
+    }
+
+    /* ── 3단 PC ─────────────────────────────────── */
     @media (min-width: 1280px) {
-      #appShell        { display: grid; grid-template-columns: 280px 1fr 380px; grid-template-rows: auto 1fr; height: 100vh; }
-      #topBar          { grid-column: 1 / -1; }
-      #leftPanel       { display: flex !important; position: static; transform: none !important; width: 280px; box-shadow: none; border-right: 1px solid #e7e5e4; }
-      #mainPanel       { overflow-y: auto; }
-      #rightPanel      { display: flex !important; position: static; transform: none !important; width: 380px; box-shadow: none; border-left: 1px solid #e7e5e4; }
+      #appShell           { display: grid;
+                            grid-template-columns: var(--left-col,260px) 1fr var(--right-col,360px);
+                            grid-template-rows: auto 1fr; height: 100vh;
+                            transition: grid-template-columns 0.28s cubic-bezier(.4,0,.2,1); }
+      #topBar             { grid-column: 1 / -1; }
+      #leftPanel          { display: flex !important; position: static; transform: none !important;
+                            min-width: 0; box-shadow: none; min-height: 0; overflow: hidden;
+                            transition: opacity 0.2s; }
+      #mainPanel          { overflow: hidden; min-height: 0; }
+      #rightPanel         { display: flex !important; position: static; transform: none !important;
+                            min-width: 0; box-shadow: none; min-height: 0; overflow: hidden;
+                            transition: opacity 0.2s; }
       #leftBackdrop,
-      #rightBackdrop   { display: none !important; }
-      #btnOpenLeft,
-      #btnOpenRight    { display: none !important; }
-      #btnOpenRightMd  { display: none !important; }
+      #rightBackdrop      { display: none !important; }
+      #btnOpenRightMd     { display: none !important; }
+      /* 패널 닫힌 상태 — CSS 변수를 JS 에서 직접 조작 */
+      #leftPanel.panel-closed  { opacity: 0; pointer-events: none; }
+      #rightPanel.panel-closed { opacity: 0; pointer-events: none; }
     }
-    /* ── 2단 태블릿 레이아웃 ───────────────────────── */
+    /* ── 2단 태블릿 ──────────────────────────────── */
     @media (min-width: 768px) and (max-width: 1279px) {
-      #appShell        { display: grid; grid-template-columns: 1fr 340px; grid-template-rows: auto 1fr; height: 100vh; }
-      #topBar          { grid-column: 1 / -1; }
-      #leftPanel       { display: none; }
-      #mainPanel       { overflow-y: auto; }
-      #rightPanel      { display: flex !important; position: static; transform: none !important; width: 340px; box-shadow: none; border-left: 1px solid #e7e5e4; }
-      #rightBackdrop   { display: none !important; }
-      #btnOpenRight    { display: none !important; }
-      #btnOpenRightMd  { display: none !important; }
+      #appShell           { display: grid;
+                            grid-template-columns: 1fr var(--right-col,340px);
+                            grid-template-rows: auto 1fr; height: 100vh;
+                            transition: grid-template-columns 0.28s cubic-bezier(.4,0,.2,1); }
+      #topBar             { grid-column: 1 / -1; }
+      #leftPanel          { position: fixed; inset-y: 0; left: 0; z-index: 50; display: flex;
+                            flex-direction: column; width: 280px; transform: translateX(-100%);
+                            transition: transform 0.28s cubic-bezier(.4,0,.2,1); background: #F7F7F8;
+                            box-shadow: 4px 0 24px rgba(0,0,0,.12); }
+      #leftPanel.open     { transform: translateX(0); }
+      #mainPanel          { overflow: hidden; min-height: 0; }
+      #rightPanel         { display: flex !important; position: static; transform: none !important;
+                            min-width: 0; box-shadow: none; min-height: 0; overflow: hidden;
+                            transition: opacity 0.2s; }
+      #rightBackdrop      { display: none !important; }
+      #btnOpenRightMd     { display: none !important; }
+      #rightPanel.panel-closed { opacity: 0; pointer-events: none; }
     }
-    /* ── 1단 모바일 ───────────────────────────────── */
+    /* ── 1단 모바일 ──────────────────────────────── */
     @media (max-width: 767px) {
       #appShell        { display: flex; flex-direction: column; height: 100vh; }
-      #mainPanel       { flex: 1; overflow-y: auto; }
-      #leftPanel       { position: fixed; inset-y: 0; left: 0; z-index: 50; display: flex; flex-direction: column; width: 80vw; max-width: 320px; transform: translateX(-100%); transition: transform 0.3s; background: white; box-shadow: 0 25px 50px -12px rgb(0 0 0/.25); }
+      #mainPanel       { flex: 1; overflow: hidden; min-height: 0; }
+      #leftPanel       { position: fixed; inset-y: 0; left: 0; z-index: 50; display: flex; flex-direction: column;
+                         width: 82vw; max-width: 300px; transform: translateX(-100%);
+                         transition: transform 0.28s cubic-bezier(.4,0,.2,1); background: #F7F7F8;
+                         box-shadow: 4px 0 24px rgba(0,0,0,.15); }
       #leftPanel.open  { transform: translateX(0); }
-      #rightPanel      { position: fixed; inset-y: 0; right: 0; z-index: 50; display: flex; flex-direction: column; width: 92vw; max-width: 420px; transform: translateX(100%); transition: transform 0.3s; background: white; box-shadow: 0 25px 50px -12px rgb(0 0 0/.25); }
+      #rightPanel      { position: fixed; inset-y: 0; right: 0; z-index: 50; display: flex; flex-direction: column;
+                         width: 92vw; max-width: 400px; transform: translateX(100%);
+                         transition: transform 0.28s cubic-bezier(.4,0,.2,1); background: white;
+                         box-shadow: -4px 0 24px rgba(0,0,0,.15); }
       #rightPanel.open { transform: translateX(0); }
+    }
+
+    /* ── 햄버거 버튼 active 상태 ─────────────────── */
+    .panel-btn-active {
+      background: #EEF2FF !important;
+      color: #5B9CFF !important;
+    }
+    .panel-btn-active .bar1 { transform: translateY(5px) rotate(45deg); }
+    .panel-btn-active .bar2 { opacity: 0; transform: scaleX(0); }
+    .panel-btn-active .bar3 { transform: translateY(-5px) rotate(-45deg); }
+
+    /* ── 햄버거 SVG 라인 트랜지션 ────────────────── */
+    .hbg-bar {
+      transition: transform 0.22s cubic-bezier(.4,0,.2,1), opacity 0.15s;
+      transform-origin: center;
+    }
+
+    /* ── Copilot 그라디언트 ──────────────────────── */
+    .copilot-gradient {
+      background: linear-gradient(135deg, #B261FF 0%, #5B9CFF 50%, #3FD9C4 100%);
+    }
+    .copilot-gradient-text {
+      background: linear-gradient(135deg, #B261FF 0%, #5B9CFF 50%, #3FD9C4 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .copilot-sparkle {
+      background: linear-gradient(135deg, #B261FF, #5B9CFF, #3FD9C4);
+      border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%;
+    }
+
+    /* ── 스크롤바 ────────────────────────────────── */
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #D1D1D1; border-radius: 99px; }
+
+    /* ── 입력 포커스 링 ──────────────────────────── */
+    .copilot-input:focus {
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(91,156,255,0.35);
+      border-color: #5B9CFF;
+    }
+
+    /* ── 도메인 탭 오버라이드 ────────────────────── */
+    .domain-tab {
+      transition: background 0.15s, color 0.15s;
+    }
+
+    /* ── 답변 박스 애니메이션 ────────────────────── */
+    @keyframes fadeSlideUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .answer-animate { animation: fadeSlideUp 0.3s ease; }
+
+    /* ── 로딩 점 애니메이션 ──────────────────────── */
+    @keyframes bounce3 {
+      0%, 80%, 100% { transform: translateY(0); opacity: .4; }
+      40%            { transform: translateY(-5px); opacity: 1; }
+    }
+    .dot-anim span { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: #5B9CFF; margin: 0 2px; }
+    .dot-anim span:nth-child(1) { animation: bounce3 1.2s ease infinite 0s; }
+    .dot-anim span:nth-child(2) { animation: bounce3 1.2s ease infinite 0.2s; }
+    .dot-anim span:nth-child(3) { animation: bounce3 1.2s ease infinite 0.4s; }
+
+    /* ── Suggestion chips ───────────────────────── */
+    .suggestion-chip {
+      background: white;
+      border: 1px solid #E3E3E3;
+      border-radius: 20px;
+      padding: 6px 14px;
+      font-size: 12px;
+      color: #333;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+      white-space: nowrap;
+    }
+    .suggestion-chip:hover {
+      background: #F0EFFF;
+      border-color: #B261FF;
+      color: #7C3AED;
     }
   </style>
 </head>
-<body class="bg-stone-100 text-stone-900 antialiased">
+<body class="antialiased">
 
 <!-- 배경막 -->
-<div id="leftBackdrop"  class="fixed inset-0 z-40 hidden bg-stone-900/40 backdrop-blur-sm"></div>
-<div id="rightBackdrop" class="fixed inset-0 z-40 hidden bg-stone-900/40 backdrop-blur-sm"></div>
+<div id="leftBackdrop"  class="fixed inset-0 z-40 hidden bg-black/30 backdrop-blur-[2px]"></div>
+<div id="rightBackdrop" class="fixed inset-0 z-40 hidden bg-black/30 backdrop-blur-[2px]"></div>
 
 <div id="appShell">
 
-  <!-- ═══════════════════════════════════════════════════
+  <!-- ═══════════════════════════════════════════════════════
        상단 헤더 (topBar)
-  ═══════════════════════════════════════════════════ -->
-  <header id="topBar" class="z-30 border-b border-stone-200 bg-white/95 backdrop-blur sticky top-0">
-    <div class="flex items-center gap-3 px-4 py-3">
+  ═══════════════════════════════════════════════════════ -->
+  <header id="topBar" class="z-30 bg-white/95 backdrop-blur-md border-b border-[#EBEBEB] sticky top-0">
+    <div class="flex items-center gap-2 px-3 py-2">
 
-      <!-- 왼쪽 패널 열기 (모바일 + 태블릿) -->
-      <button id="btnOpenLeft" class="rounded-xl border border-stone-200 bg-white p-2 text-stone-700 shadow-sm hover:bg-stone-50 xl:hidden" aria-label="메뉴">
-        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7h16M4 12h16M4 17h16"/>
-        </svg>
+      <!-- ── 왼쪽 사이드바 햄버거 토글 (모든 크기) ── -->
+      <button id="btnOpenLeft"
+        class="h-8 w-8 flex flex-col items-center justify-center gap-[4.5px] rounded-lg text-[#555] hover:bg-[#F0F0F0] transition shrink-0"
+        aria-label="사이드바 열기/닫기">
+        <span class="hbg-bar bar1 block h-[1.8px] w-[18px] bg-current rounded-full"></span>
+        <span class="hbg-bar bar2 block h-[1.8px] w-[18px] bg-current rounded-full"></span>
+        <span class="hbg-bar bar3 block h-[1.8px] w-[18px] bg-current rounded-full"></span>
       </button>
 
-      <!-- 로고 -->
-      <div class="flex items-center gap-2.5 min-w-0">
-        <div class="hidden h-9 w-9 shrink-0 place-items-center rounded-xl bg-indigo-600 text-xs font-bold text-white sm:grid">RAG</div>
-        <div class="min-w-0">
-          <div class="text-[10px] font-semibold tracking-widest text-indigo-600 sm:text-xs">MIND · MED · LAW</div>
-          <div class="truncate text-sm font-semibold text-stone-900 sm:text-base">심리상담·의료·법률 문서 검색</div>
+      <!-- ── 로고 ── -->
+      <div class="flex items-center gap-2 min-w-0">
+        <div class="h-7 w-7 shrink-0 flex items-center justify-center copilot-sparkle">
+          <svg class="h-4 w-4 text-white" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/>
+          </svg>
+        </div>
+        <div class="min-w-0 hidden sm:block">
+          <span class="text-sm font-semibold text-[#1A1A1A] tracking-tight truncate">Mind · Med · Law RAG</span>
         </div>
       </div>
 
-      <!-- PC 네비 -->
-      <nav class="ml-auto hidden items-center gap-5 text-sm text-stone-600 xl:flex">
-        <a href="#workspace" class="hover:text-stone-900">Workspace</a>
-        <a href="#settings"  class="hover:text-stone-900">Settings</a>
-        <a id="btnHealth" href="#" target="_blank" rel="noreferrer" class="rounded-xl border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium hover:bg-stone-50">헬스체크</a>
-        <button id="btnSettings" class="rounded-xl bg-stone-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-stone-700">API 설정</button>
-      </nav>
+      <!-- ── 가운데 여백 ── -->
+      <div class="flex-1"></div>
 
-      <!-- 태블릿: 오른쪽 패널 토글 없음(항상 표시) / 모바일: 근거 버튼 -->
-      <div class="ml-auto flex items-center gap-2 xl:hidden">
-        <button id="btnOpenRight" class="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-900 hover:bg-indigo-100 md:hidden" aria-label="근거 보기">근거</button>
-        <a id="btnHealthMobile" href="#" target="_blank" rel="noreferrer" class="hidden rounded-xl border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium hover:bg-stone-50 sm:block xl:hidden">헬스</a>
-        <button id="btnSettingsMobile" class="rounded-xl bg-stone-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-stone-700 xl:hidden">설정</button>
+      <!-- ── 오른쪽 액션 버튼들 ── -->
+      <div class="flex items-center gap-1.5">
+        <!-- 헬스체크 (sm 이상) -->
+        <a id="btnHealth" href="#" target="_blank" rel="noreferrer"
+          class="hidden sm:flex h-8 px-2.5 items-center gap-1.5 rounded-lg border border-[#E3E3E3] text-xs text-[#555] hover:bg-[#F5F5F5] transition">
+          <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <span class="hidden lg:inline">헬스체크</span>
+        </a>
+        <!-- API 설정 -->
+        <button id="btnSettings"
+          class="h-8 px-2.5 flex items-center gap-1.5 rounded-lg bg-[#5B9CFF] text-xs text-white font-medium hover:bg-[#4A8AEE] transition">
+          <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+          <span class="hidden sm:inline">설정</span>
+        </button>
+
+        <!-- ── 오른쪽 패널 햄버거 토글 (모든 크기) ── -->
+        <button id="btnOpenRight"
+          class="h-8 w-8 flex items-center justify-center rounded-lg text-[#555] hover:bg-[#F0F0F0] transition shrink-0"
+          aria-label="근거 패널 열기/닫기">
+          <svg class="h-4.5 w-4.5" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+          </svg>
+        </button>
       </div>
+
     </div>
   </header>
 
-  <!-- ═══════════════════════════════════════════════════
-       왼쪽 패널 (leftPanel) — PC 고정, 모/태블릿 오프캔버스
-  ═══════════════════════════════════════════════════ -->
-  <aside id="leftPanel" class="flex-col overflow-y-auto bg-white">
-    <div class="flex items-center gap-2 border-b border-stone-100 px-4 py-4">
-      <div class="h-8 w-8 shrink-0 grid place-items-center rounded-xl bg-indigo-600 text-xs font-bold text-white">RAG</div>
-      <span class="text-sm font-semibold text-stone-800">워크스페이스</span>
-      <button id="btnCloseLeft" class="ml-auto rounded-lg p-1.5 text-stone-400 hover:bg-stone-100 xl:hidden" aria-label="닫기">
-        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+  <!-- 모바일/태블릿 전용 숨겨진 버튼 (app.js 호환) -->
+  <button id="btnSettingsMobile" class="hidden"></button>
+  <a    id="btnHealthMobile"    href="#" class="hidden"></a>
+
+  <!-- ═══════════════════════════════════════════════════════
+       왼쪽 사이드바 (leftPanel)
+  ═══════════════════════════════════════════════════════ -->
+  <aside id="leftPanel" class="flex-col overflow-y-auto bg-[#F7F7F8] border-r border-[#E5E5E5]">
+
+    <!-- 사이드바 헤더 -->
+    <div class="flex items-center gap-2 px-4 py-4 border-b border-[#EBEBEB]">
+      <div class="h-6 w-6 shrink-0 flex items-center justify-center copilot-sparkle">
+        <svg class="h-3.5 w-3.5 text-white" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/>
+        </svg>
+      </div>
+      <span class="text-sm font-semibold text-[#1A1A1A]">워크스페이스</span>
+      <button id="btnCloseLeft" class="ml-auto h-7 w-7 flex items-center justify-center rounded-lg text-[#888] hover:bg-[#EBEBEB]">
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
         </svg>
       </button>
     </div>
 
-    <div class="space-y-5 px-4 py-4">
+    <div class="flex flex-col gap-5 px-3 py-4">
+
       <!-- 도메인 선택 -->
       <section>
-        <div class="text-[10px] font-semibold uppercase tracking-widest text-stone-400">도메인</div>
-        <div id="domainTabs" class="mt-2 grid grid-cols-1 gap-1.5">
+        <div class="px-1 mb-2 text-[10px] font-semibold uppercase tracking-widest text-[#999]">도메인</div>
+        <div id="domainTabs" class="flex flex-col gap-0.5">
           <!-- JS 로 생성 -->
         </div>
       </section>
 
       <!-- 근거 개수 -->
       <section>
-        <div class="text-[10px] font-semibold uppercase tracking-widest text-stone-400">근거 개수</div>
-        <select id="topK" class="mt-2 w-full rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100">
-          <option value="3">3개</option>
-          <option value="4" selected>4개</option>
-          <option value="5">5개</option>
-          <option value="6">6개</option>
-        </select>
+        <div class="px-1 mb-2 text-[10px] font-semibold uppercase tracking-widest text-[#999]">근거 개수</div>
+        <div class="relative">
+          <select id="topK" class="w-full appearance-none rounded-xl border border-[#E3E3E3] bg-white px-3 py-2 pr-8 text-sm text-[#1A1A1A] focus:border-[#5B9CFF] focus:outline-none focus:ring-2 focus:ring-[#5B9CFF]/20 cursor-pointer">
+            <option value="3">3개</option>
+            <option value="4" selected>4개</option>
+            <option value="5">5개</option>
+            <option value="6">6개</option>
+          </select>
+          <svg class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#999]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+          </svg>
+        </div>
       </section>
 
       <!-- 예시 질문 -->
       <section>
-        <div class="text-[10px] font-semibold uppercase tracking-widest text-stone-400">예시 질문</div>
-        <button id="btnUseExample" class="mt-2 w-full rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-3 text-left text-xs leading-5 text-indigo-900 transition hover:border-indigo-200 hover:bg-indigo-100">
+        <div class="px-1 mb-2 text-[10px] font-semibold uppercase tracking-widest text-[#999]">예시 질문</div>
+        <button id="btnUseExample"
+          class="w-full text-left rounded-xl border border-[#E3E3E3] bg-white px-3 py-3 text-xs leading-5 text-[#444] hover:border-[#B261FF]/40 hover:bg-[#F5F0FF] transition">
         </button>
       </section>
 
       <!-- 최근 질문 -->
       <section>
-        <div class="flex items-center">
-          <div class="text-[10px] font-semibold uppercase tracking-widest text-stone-400">최근 질문</div>
-          <button id="btnClearHistory" class="ml-auto text-[10px] font-medium text-stone-400 hover:text-stone-700">비우기</button>
+        <div class="px-1 mb-2 flex items-center">
+          <span class="text-[10px] font-semibold uppercase tracking-widest text-[#999]">최근 질문</span>
+          <button id="btnClearHistory" class="ml-auto text-[10px] font-medium text-[#AAA] hover:text-[#666] transition">비우기</button>
         </div>
-        <div id="historyList" class="mt-2 space-y-1.5"></div>
+        <div id="historyList" class="flex flex-col gap-0.5"></div>
       </section>
 
-      <!-- 연결 -->
-      <section class="rounded-xl border border-stone-100 bg-stone-50 p-3">
-        <div class="text-xs font-semibold text-stone-700">연결 도구</div>
-        <div class="mt-2 flex flex-wrap gap-2">
-          <a id="btnHealthLeft" href="#" target="_blank" rel="noreferrer" class="rounded-lg bg-stone-800 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-stone-700">헬스체크</a>
-          <button id="btnSettingsLeft" class="rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-xs font-medium hover:bg-stone-100">API 설정</button>
+      <!-- 연결 도구 -->
+      <section class="rounded-xl border border-[#E3E3E3] bg-white p-3">
+        <div class="text-xs font-semibold text-[#444] mb-2">연결 도구</div>
+        <div class="flex flex-wrap gap-2">
+          <a id="btnHealthLeft" href="#" target="_blank" rel="noreferrer"
+            class="flex items-center gap-1 rounded-lg bg-[#1A1A1A] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[#333] transition">
+            <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            헬스체크
+          </a>
+          <button id="btnSettingsLeft"
+            class="flex items-center gap-1 rounded-lg border border-[#E3E3E3] bg-white px-2.5 py-1.5 text-xs font-medium text-[#444] hover:bg-[#F5F5F5] transition">
+            <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+            API 설정
+          </button>
         </div>
       </section>
+
     </div>
+
+    <!-- ── 회사 소개 (사이드바 하단 고정) ───────────── -->
+    <div class="mt-auto px-3 pb-4 pt-3 border-t border-[#EBEBEB] shrink-0">
+      <a href="https://www.edumgt.co.kr" target="_blank" rel="noreferrer"
+        class="group block rounded-xl border border-[#E3E3E3] bg-white p-3 hover:border-[#5B9CFF]/50 hover:shadow-sm transition">
+        <div class="flex items-center gap-2.5 mb-2">
+          <!-- 로고 아이콘 -->
+          <div class="h-8 w-8 shrink-0 rounded-lg flex items-center justify-center"
+            style="background: linear-gradient(135deg,#0EA5E9,#B261FF)">
+            <span class="text-white text-[11px] font-black tracking-tight">E</span>
+          </div>
+          <div class="min-w-0">
+            <div class="text-xs font-bold text-[#1A1A1A] leading-tight">(주)에듀엠지티</div>
+            <div class="text-[10px] text-[#888] leading-tight">AI Education Technology</div>
+          </div>
+          <!-- 외부 링크 아이콘 -->
+          <svg class="h-3.5 w-3.5 shrink-0 ml-auto text-[#CCC] group-hover:text-[#5B9CFF] transition"
+            fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+          </svg>
+        </div>
+        <p class="text-[10px] text-[#AAA] leading-4">AI 기반 문서 검색 · 상담 지원 솔루션</p>
+        <div class="mt-1.5 flex items-center gap-1">
+          <svg class="h-3 w-3 text-[#5B9CFF]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9"/>
+          </svg>
+          <span class="text-[10px] text-[#5B9CFF] font-medium">www.edumgt.co.kr</span>
+        </div>
+      </a>
+    </div>
+
   </aside>
 
-  <!-- ═══════════════════════════════════════════════════
+  <!-- ═══════════════════════════════════════════════════════
        중앙 메인 패널 (mainPanel)
-  ═══════════════════════════════════════════════════ -->
-  <main id="mainPanel" class="bg-stone-100">
-    <div class="mx-auto max-w-2xl space-y-4 p-4 sm:p-5">
+  ═══════════════════════════════════════════════════════ -->
+  <main id="mainPanel" class="bg-white flex flex-col overflow-hidden">
 
-      <!-- 히어로 헤더 -->
-      <div class="overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-700 via-indigo-600 to-violet-600 px-5 py-6 text-white sm:px-6">
-        <div class="text-[10px] font-semibold uppercase tracking-widest text-indigo-200">Case Prompt</div>
-        <h1 id="heroTitle" class="mt-2 text-lg font-semibold leading-snug sm:text-xl">도메인을 선택하고 질문을 입력하세요.</h1>
-        <p id="heroDesc" class="mt-2 text-xs leading-5 text-indigo-100/90 sm:text-sm"></p>
+    <!-- 스크롤 콘텐츠 영역 (히어로 + 답변) -->
+    <div class="flex-1 overflow-y-auto min-h-0">
+      <div class="mx-auto w-full max-w-2xl px-4 pt-8 pb-4 sm:px-6">
+
+        <!-- Copilot 스타일 히어로 -->
+        <div class="mb-6 flex flex-col items-center text-center">
+          <div class="h-12 w-12 flex items-center justify-center copilot-sparkle mb-3 shadow-lg">
+            <svg class="h-6 w-6 text-white" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/>
+            </svg>
+          </div>
+          <h1 id="heroTitle" class="text-xl font-semibold text-[#1A1A1A] sm:text-2xl">도메인을 선택하고 질문을 입력하세요.</h1>
+          <p id="heroDesc" class="mt-1.5 text-sm text-[#666] max-w-sm"></p>
+        </div>
+
+        <!-- 응답 영역 -->
+        <section class="rounded-2xl border border-[#EBEBEB] bg-[#FAFAFA] p-4 sm:p-5">
+          <div class="flex flex-wrap items-center gap-2 mb-3">
+            <div class="flex items-center gap-1.5">
+              <div class="h-5 w-5 flex items-center justify-center copilot-sparkle">
+                <svg class="h-2.5 w-2.5 text-white" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/>
+                </svg>
+              </div>
+              <span class="text-xs font-semibold text-[#1A1A1A]">Copilot 답변</span>
+            </div>
+            <div id="usedCollectionBadge" class="ml-auto rounded-full bg-white border border-[#E3E3E3] px-2.5 py-0.5 text-[10px] font-medium text-[#888]">collection: -</div>
+          </div>
+          <div id="answerBox" class="text-sm leading-7 text-[#333]">
+            질문을 보내면 여기에서 답변을 확인할 수 있습니다.
+          </div>
+          <div class="mt-3 flex items-center gap-2">
+            <button id="btnOpenEvidenceFromAnswer"
+              class="flex items-center gap-1 rounded-lg border border-[#E3E3E3] bg-white px-3 py-1.5 text-xs font-medium text-[#555] hover:bg-[#F5F5F5] transition md:hidden">
+              <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+              </svg>
+              근거 보기
+            </button>
+            <div id="citationCount" class="rounded-full bg-[#EEF2FF] border border-[#C7D7FF] px-2.5 py-0.5 text-[10px] font-semibold text-[#5B9CFF]">0건</div>
+          </div>
+        </section>
+
+        <!-- Request Preview -->
+        <details class="mt-4 group">
+          <summary class="flex cursor-pointer items-center gap-1.5 px-1 text-xs text-[#AAA] hover:text-[#666] transition select-none">
+            <svg class="h-3.5 w-3.5 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+            </svg>
+            Request Preview
+          </summary>
+          <div class="mt-2 rounded-xl border border-[#EBEBEB] bg-[#FAFAFA] p-3">
+            <pre id="requestPreview" class="overflow-x-auto text-[11px] leading-5 text-[#666] sm:text-xs font-mono"></pre>
+          </div>
+        </details>
+
+        <p class="mt-6 pb-4 text-center text-[10px] text-[#CCC]">
+          Mind · Med · Law RAG — Tailwind CSS · FastAPI
+        </p>
       </div>
-
-      <!-- 질문 입력 -->
-      <section id="workspace" class="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
-        <label for="queryInput" class="text-xs font-semibold uppercase tracking-widest text-stone-400">질문 입력</label>
-        <textarea id="queryInput" rows="5"
-          class="mt-2 w-full resize-none rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm leading-7 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-          placeholder="질문을 입력하거나 좌측 예시 질문을 클릭하세요."></textarea>
-
-        <div class="mt-3 flex flex-wrap gap-2">
-          <button id="btnSubmit" class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">질문 보내기</button>
-          <button id="btnExample" class="rounded-xl border border-stone-200 bg-white px-4 py-2 text-sm font-medium hover:bg-stone-50">예시 넣기</button>
-          <button id="btnResetQuery" class="rounded-xl border border-stone-200 bg-white px-4 py-2 text-sm font-medium hover:bg-stone-50">입력 비우기</button>
-          <button id="btnOpenRightMd" class="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-900 hover:bg-indigo-100 md:hidden">근거 보기</button>
-        </div>
-
-        <div id="status" class="mt-3 hidden rounded-xl border px-3 py-2 text-xs"></div>
-      </section>
-
-      <!-- 응답 -->
-      <section class="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
-        <div class="flex flex-wrap items-center gap-2">
-          <div class="text-[10px] font-semibold uppercase tracking-widest text-stone-400">Answer</div>
-          <div id="usedCollectionBadge" class="ml-auto rounded-full bg-stone-100 px-2.5 py-0.5 text-[10px] font-medium text-stone-500">collection: -</div>
-        </div>
-        <div id="answerBox" class="mt-3 rounded-xl bg-stone-50 p-4 text-sm leading-7 text-stone-600">
-          질문을 보내면 여기에서 답변을 확인할 수 있습니다.
-        </div>
-        <div class="mt-3 flex items-center gap-2">
-          <button id="btnOpenEvidenceFromAnswer" class="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-900 hover:bg-indigo-100 md:hidden">근거 보기</button>
-          <div id="citationCount" class="rounded-full bg-indigo-50 px-2.5 py-0.5 text-[10px] font-medium text-indigo-700">0건</div>
-        </div>
-      </section>
-
-      <!-- 전송 데이터 미리보기 -->
-      <section class="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
-        <div class="text-[10px] font-semibold uppercase tracking-widest text-stone-400">Request Preview</div>
-        <pre id="requestPreview" class="mt-3 overflow-x-auto rounded-xl bg-stone-50 p-3 text-[10px] leading-5 text-stone-600 sm:text-xs"></pre>
-      </section>
-
-      <footer class="py-4 text-center text-[10px] text-stone-400">
-        Mind · Med · Law RAG — Tailwind CSS · FastAPI
-      </footer>
     </div>
+
+    <!-- 고정 하단 입력 바 -->
+    <div class="shrink-0 border-t border-[#EBEBEB] bg-white/95 backdrop-blur-md px-4 py-3 sm:px-6">
+      <div id="workspace" class="mx-auto w-full max-w-2xl">
+
+        <!-- Suggestion chips -->
+        <div class="flex gap-2 overflow-x-auto pb-2 mb-2.5 scrollbar-hide">
+          <button id="btnExample" class="suggestion-chip shrink-0">예시 질문 넣기</button>
+          <button id="btnResetQuery" class="suggestion-chip shrink-0">입력 비우기</button>
+          <button id="btnOpenRightMd" class="suggestion-chip shrink-0 md:hidden">근거 보기</button>
+        </div>
+
+        <label for="queryInput" class="sr-only">질문 입력</label>
+        <textarea id="queryInput" rows="3"
+          class="copilot-input w-full resize-none rounded-xl border border-[#E3E3E3] bg-[#FAFAFA] px-4 py-3 text-sm leading-7 text-[#1A1A1A] placeholder-[#AAA] transition"
+          placeholder="질문을 입력하거나 좌측 예시 질문을 클릭하세요. (Ctrl+Enter 전송)"></textarea>
+
+        <div class="mt-2.5 flex items-center gap-2">
+          <div id="status" class="hidden rounded-xl border px-3 py-2 text-xs flex-1"></div>
+          <button id="btnSubmit"
+            class="ml-auto flex items-center gap-2 rounded-xl bg-[#5B9CFF] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#4A8AEE] transition">
+            <span>질문 보내기</span>
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
   </main>
 
-  <!-- ═══════════════════════════════════════════════════
-       오른쪽 근거 패널 (rightPanel) — PC/태블릿 고정, 모바일 오프캔버스
-  ═══════════════════════════════════════════════════ -->
-  <aside id="rightPanel" class="flex-col bg-white">
-    <div class="flex shrink-0 items-center gap-2 border-b border-stone-100 px-4 py-4">
+  <!-- ═══════════════════════════════════════════════════════
+       오른쪽 근거 패널 (rightPanel)
+  ═══════════════════════════════════════════════════════ -->
+  <aside id="rightPanel" class="flex-col bg-white border-l border-[#EBEBEB]">
+    <div class="flex shrink-0 items-center gap-2 border-b border-[#EBEBEB] px-4 py-4">
       <div>
-        <div class="text-[10px] font-semibold uppercase tracking-widest text-stone-400">Evidence</div>
-        <div class="mt-0.5 text-sm font-semibold text-stone-900">근거 문단</div>
+        <div class="text-[10px] font-semibold uppercase tracking-widest text-[#AAA]">Evidence</div>
+        <div class="mt-0.5 text-sm font-semibold text-[#1A1A1A]">근거 문단</div>
       </div>
-      <div id="citationCountPanel" class="ml-auto rounded-full bg-indigo-50 px-2.5 py-0.5 text-[10px] font-medium text-indigo-700">0건</div>
-      <button id="btnCloseRight" class="ml-1 rounded-lg p-1.5 text-stone-400 hover:bg-stone-100 md:hidden" aria-label="닫기">
-        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+      <div id="citationCountPanel" class="ml-auto rounded-full bg-[#EEF2FF] border border-[#C7D7FF] px-2.5 py-0.5 text-[10px] font-semibold text-[#5B9CFF]">0건</div>
+      <button id="btnCloseRight" class="ml-1 h-7 w-7 flex items-center justify-center rounded-lg text-[#888] hover:bg-[#F5F5F5] md:hidden">
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
         </svg>
       </button>
     </div>
     <div id="citations" class="flex-1 space-y-3 overflow-y-auto px-4 py-4">
-      <div class="rounded-xl border border-dashed border-stone-200 px-4 py-5 text-xs leading-5 text-stone-400">
+      <div class="rounded-xl border border-dashed border-[#E3E3E3] px-4 py-6 text-xs leading-6 text-[#BBB] text-center">
+        <svg class="h-8 w-8 mx-auto mb-2 text-[#DDD]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        </svg>
         아직 조회된 근거가 없습니다.
       </div>
     </div>
@@ -232,42 +477,58 @@
 
 </div><!-- /appShell -->
 
-<!-- ── API 설정 모달 ────────────────────────────── -->
+<!-- ── API 설정 모달 ─────────────────────────────────── -->
 <div id="modal" class="fixed inset-0 z-[60] hidden">
-  <div class="absolute inset-0 bg-stone-900/30"></div>
+  <div class="absolute inset-0 bg-black/30 backdrop-blur-[3px]"></div>
   <div class="absolute inset-0 grid place-items-center p-4">
-    <div class="w-full max-w-md rounded-2xl border border-stone-200 bg-white shadow-2xl">
-      <div class="flex items-center border-b border-stone-100 px-5 py-4">
-        <div id="settings" class="text-sm font-semibold text-stone-900">API 설정</div>
-        <button id="btnClose" class="ml-auto rounded-lg p-1.5 text-stone-400 hover:bg-stone-100" aria-label="닫기">
-          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+    <div class="w-full max-w-md rounded-2xl border border-[#E5E5E5] bg-white shadow-2xl">
+      <div class="flex items-center border-b border-[#F0F0F0] px-5 py-4">
+        <div class="flex items-center gap-2">
+          <svg class="h-4 w-4 text-[#5B9CFF]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+          <div id="settings" class="text-sm font-semibold text-[#1A1A1A]">API 설정</div>
+        </div>
+        <button id="btnClose" class="ml-auto h-7 w-7 flex items-center justify-center rounded-lg text-[#888] hover:bg-[#F5F5F5]">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
           </svg>
         </button>
       </div>
       <div class="space-y-4 px-5 py-5">
-        <p class="text-xs leading-5 text-stone-500">API Base URL을 저장하면 <code class="rounded bg-stone-100 px-1">/ask</code>와 <code class="rounded bg-stone-100 px-1">/healthz</code> 호출에 사용합니다.</p>
+        <p class="text-xs leading-5 text-[#777]">
+          API Base URL을 저장하면 <code class="rounded-md bg-[#F5F5F5] px-1.5 py-0.5 font-mono text-[#555]">/ask</code>와
+          <code class="rounded-md bg-[#F5F5F5] px-1.5 py-0.5 font-mono text-[#555]">/healthz</code> 호출에 사용합니다.
+        </p>
         <div>
-          <label for="apiBase" class="text-xs font-medium text-stone-700">API Base URL</label>
+          <label for="apiBase" class="text-xs font-semibold text-[#444]">API Base URL</label>
           <input id="apiBase" type="text" placeholder="http://localhost:8000"
-            class="mt-1.5 w-full rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"/>
+            class="mt-1.5 w-full rounded-xl border border-[#E3E3E3] bg-[#FAFAFA] px-3 py-2.5 text-sm text-[#1A1A1A] placeholder-[#BBB] focus:border-[#5B9CFF] focus:outline-none focus:ring-2 focus:ring-[#5B9CFF]/20 transition"/>
         </div>
         <div>
-          <label for="defaultDomain" class="text-xs font-medium text-stone-700">기본 도메인</label>
-          <select id="defaultDomain"
-            class="mt-1.5 w-full rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100">
-            <option value="02.법률">02.법률</option>
-            <option value="01.의료">01.의료</option>
-            <option value="우울증">우울증</option>
-            <option value="불안장애">불안장애</option>
-            <option value="중독">중독</option>
-            <option value="일반군">일반군</option>
-            <option value="">전체 검색</option>
-          </select>
+          <label for="defaultDomain" class="text-xs font-semibold text-[#444]">기본 도메인</label>
+          <div class="relative mt-1.5">
+            <select id="defaultDomain"
+              class="w-full appearance-none rounded-xl border border-[#E3E3E3] bg-[#FAFAFA] px-3 py-2.5 pr-8 text-sm text-[#1A1A1A] focus:border-[#5B9CFF] focus:outline-none focus:ring-2 focus:ring-[#5B9CFF]/20 cursor-pointer transition">
+              <option value="02.법률">02.법률</option>
+              <option value="01.의료">01.의료</option>
+              <option value="우울증">우울증</option>
+              <option value="불안장애">불안장애</option>
+              <option value="중독">중독</option>
+              <option value="일반군">일반군</option>
+              <option value="">전체 검색</option>
+            </select>
+            <svg class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#999]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </div>
         </div>
-        <div class="flex gap-2">
-          <button id="btnSave" class="rounded-xl bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700">저장</button>
-          <button id="btnReset" class="rounded-xl border border-stone-200 bg-white px-4 py-2 text-sm font-medium hover:bg-stone-50">초기화</button>
+        <div class="flex gap-2 pt-1">
+          <button id="btnSave"
+            class="rounded-xl bg-[#5B9CFF] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4A8AEE] transition">저장</button>
+          <button id="btnReset"
+            class="rounded-xl border border-[#E3E3E3] bg-white px-4 py-2 text-sm font-medium text-[#555] hover:bg-[#F5F5F5] transition">초기화</button>
         </div>
       </div>
     </div>
