@@ -3,21 +3,38 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>심리상담·의료·법률 RAG</title>
+  <title>Mind · Med · Law · Travel RAG</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <meta name="color-scheme" content="light">
   <style>
     * { box-sizing: border-box; }
 
-    body {
-      font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
-      background: #F0F0F0;
+    /* html에 지정해야 Tailwind rem 유틸리티가 모두 스케일업됨 */
+    html {
+      font-size: 18px;
     }
+
+    body {
+      font-family: 'Segoe UI Variable', 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, -apple-system, sans-serif;
+      background: #F0F0F0;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      word-break: keep-all;
+    }
+
+    /* 하드코딩된 소형 픽셀 클래스 일괄 업스케일 */
+    .text-\[9px\]  { font-size: 12px !important; }
+    .text-\[10px\] { font-size: 13px !important; }
+    .text-\[11px\] { font-size: 14px !important; }
+    .text-\[12px\] { font-size: 15px !important; }
+    .text-\[13px\] { font-size: 15px !important; }
 
     /* ── 3단 PC ─────────────────────────────────── */
     @media (min-width: 1280px) {
       #appShell           { display: grid;
-                            grid-template-columns: var(--left-col,260px) 1fr var(--right-col,360px);
+                            grid-template-columns: var(--left-col,280px) 1fr var(--right-col,400px);
                             grid-template-rows: auto 1fr; height: 100vh;
                             transition: grid-template-columns 0.28s cubic-bezier(.4,0,.2,1); }
       #topBar             { grid-column: 1 / -1; }
@@ -38,7 +55,7 @@
     /* ── 2단 태블릿 ──────────────────────────────── */
     @media (min-width: 768px) and (max-width: 1279px) {
       #appShell           { display: grid;
-                            grid-template-columns: 1fr var(--right-col,340px);
+                            grid-template-columns: 1fr var(--right-col,380px);
                             grid-template-rows: auto 1fr; height: 100vh;
                             transition: grid-template-columns 0.28s cubic-bezier(.4,0,.2,1); }
       #topBar             { grid-column: 1 / -1; }
@@ -140,8 +157,8 @@
       background: white;
       border: 1px solid #E3E3E3;
       border-radius: 20px;
-      padding: 6px 14px;
-      font-size: 12px;
+      padding: 7px 16px;
+      font-size: 14px;
       color: #333;
       cursor: pointer;
       transition: background 0.15s, border-color 0.15s;
@@ -185,7 +202,7 @@
           </svg>
         </div>
         <div class="min-w-0 hidden sm:block">
-          <span class="text-sm font-semibold text-[#1A1A1A] tracking-tight truncate">Mind · Med · Law RAG</span>
+          <span class="text-sm font-semibold text-[#1A1A1A] tracking-tight truncate">Mind · Med · Law · Travel RAG</span>
         </div>
       </div>
 
@@ -194,6 +211,16 @@
 
       <!-- ── 오른쪽 액션 버튼들 ── -->
       <div class="flex items-center gap-1.5">
+        <!-- DB현황 -->
+        <button id="btnDbStatus"
+          class="h-8 px-2.5 flex items-center gap-1.5 rounded-lg border border-[#E3E3E3] text-xs text-[#555] hover:bg-[#F0F9FF] hover:border-[#BAE0FF] hover:text-[#0EA5E9] transition">
+          <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 7a2 2 0 012-2h12a2 2 0 012 2v1a2 2 0 01-2 2H6a2 2 0 01-2-2V7z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 13a2 2 0 012-2h12a2 2 0 012 2v1a2 2 0 01-2 2H6a2 2 0 01-2-2v-1z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 19a2 2 0 012-2h12a2 2 0 012 2v0a2 2 0 01-2 2H6a2 2 0 01-2-2v0z"/>
+          </svg>
+          <span class="hidden md:inline">DB현황</span>
+        </button>
         <!-- 헬스체크 (sm 이상) -->
         <a id="btnHealth" href="#" target="_blank" rel="noreferrer"
           class="hidden sm:flex h-8 px-2.5 items-center gap-1.5 rounded-lg border border-[#E3E3E3] text-xs text-[#555] hover:bg-[#F5F5F5] transition">
@@ -317,37 +344,8 @@
 
     </div>
 
-    <!-- ── 회사 소개 (사이드바 하단 고정) ───────────── -->
-    <div class="mt-auto px-3 pb-4 pt-3 border-t border-[#EBEBEB] shrink-0">
-      <a href="https://www.edumgt.co.kr" target="_blank" rel="noreferrer"
-        class="group block rounded-xl border border-[#E3E3E3] bg-white p-3 hover:border-[#5B9CFF]/50 hover:shadow-sm transition">
-        <div class="flex items-center gap-2.5 mb-2">
-          <!-- 로고 아이콘 -->
-          <div class="h-8 w-8 shrink-0 rounded-lg flex items-center justify-center"
-            style="background: linear-gradient(135deg,#0EA5E9,#B261FF)">
-            <span class="text-white text-[11px] font-black tracking-tight">E</span>
-          </div>
-          <div class="min-w-0">
-            <div class="text-xs font-bold text-[#1A1A1A] leading-tight">(주)에듀엠지티</div>
-            <div class="text-[10px] text-[#888] leading-tight">AI Education Technology</div>
-          </div>
-          <!-- 외부 링크 아이콘 -->
-          <svg class="h-3.5 w-3.5 shrink-0 ml-auto text-[#CCC] group-hover:text-[#5B9CFF] transition"
-            fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round"
-              d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
-          </svg>
-        </div>
-        <p class="text-[10px] text-[#AAA] leading-4">AI 기반 문서 검색 · 상담 지원 솔루션</p>
-        <div class="mt-1.5 flex items-center gap-1">
-          <svg class="h-3 w-3 text-[#5B9CFF]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round"
-              d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9"/>
-          </svg>
-          <span class="text-[10px] text-[#5B9CFF] font-medium">www.edumgt.co.kr</span>
-        </div>
-      </a>
-    </div>
+    <!-- 사이드바 하단 여백 (고정 푸터가 대체) -->
+    <div class="pb-12"></div>
 
   </aside>
 
@@ -412,14 +410,14 @@
           </div>
         </details>
 
-        <p class="mt-6 pb-4 text-center text-[10px] text-[#CCC]">
-          Mind · Med · Law RAG — Tailwind CSS · FastAPI
-        </p>
+        <div class="mt-6 pb-24 text-center text-[10px] text-[#CCC]">
+          Mind · Med · Law · Travel RAG — Tailwind CSS · FastAPI · Leaflet
+        </div>
       </div>
     </div>
 
-    <!-- 고정 하단 입력 바 -->
-    <div class="shrink-0 border-t border-[#EBEBEB] bg-white/95 backdrop-blur-md px-4 py-3 sm:px-6">
+    <!-- 고정 하단 입력 바 (푸터 높이 44px 고려해 pb 추가) -->
+    <div class="shrink-0 border-t border-[#EBEBEB] bg-white/95 backdrop-blur-md px-4 py-3 sm:px-6 pb-14">
       <div id="workspace" class="mx-auto w-full max-w-2xl">
 
         <!-- Suggestion chips -->
@@ -517,6 +515,7 @@
               <option value="불안장애">불안장애</option>
               <option value="중독">중독</option>
               <option value="일반군">일반군</option>
+              <option value="여행">여행</option>
               <option value="">전체 검색</option>
             </select>
             <svg class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#999]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -531,6 +530,70 @@
             class="rounded-xl border border-[#E3E3E3] bg-white px-4 py-2 text-sm font-medium text-[#555] hover:bg-[#F5F5F5] transition">초기화</button>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── 하단 고정 푸터 ──────────────────────────────────────── -->
+<footer class="fixed bottom-0 left-0 right-0 z-20 bg-white/95 backdrop-blur-md border-t border-[#EBEBEB]">
+  <div class="flex items-center justify-between px-4 py-2">
+    <a href="https://www.edumgt.co.kr" target="_blank" rel="noreferrer"
+      class="flex items-center gap-2 group min-w-0">
+      <div class="h-6 w-6 shrink-0 rounded-md flex items-center justify-center"
+        style="background:linear-gradient(135deg,#0EA5E9,#B261FF)">
+        <span class="text-white text-[10px] font-black">(주)</span>
+      </div>
+      <div class="min-w-0 hidden sm:block">
+        <span class="text-xs font-semibold text-[#1A1A1A] group-hover:text-[#5B9CFF] transition">(주)에듀엠지티</span>
+        <span class="ml-1.5 text-[11px] text-[#888] group-hover:text-[#5B9CFF] transition">www.edumgt.co.kr</span>
+      </div>
+      <div class="sm:hidden">
+        <span class="text-xs font-semibold text-[#1A1A1A]">에듀엠지티</span>
+      </div>
+    </a>
+    <div class="flex items-center gap-3">
+      <span class="text-[11px] text-[#CCC] hidden md:block">AI 기반 문서 검색 · 상담 지원 솔루션</span>
+      <span class="text-[11px] text-[#CCC]">Mind · Med · Law · Travel RAG</span>
+    </div>
+  </div>
+</footer>
+
+<!-- ── DB현황 모달 ─────────────────────────────────────── -->
+<div id="dbModal" class="fixed inset-0 z-[60] hidden">
+  <div class="absolute inset-0 bg-black/40 backdrop-blur-[3px]"></div>
+  <div class="absolute inset-0 grid place-items-center p-4">
+    <div class="w-full max-w-lg rounded-2xl border border-[#E5E5E5] bg-white shadow-2xl overflow-hidden">
+
+      <!-- 모달 헤더 -->
+      <div class="flex items-center gap-3 px-5 py-4 border-b border-[#F0F0F0]"
+        style="background:linear-gradient(135deg,#0EA5E918,#7C3AED10)">
+        <div class="h-9 w-9 shrink-0 rounded-xl flex items-center justify-center bg-[#0EA5E9]">
+          <svg class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 7a2 2 0 012-2h12a2 2 0 012 2v1a2 2 0 01-2 2H6a2 2 0 01-2-2V7z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 13a2 2 0 012-2h12a2 2 0 012 2v1a2 2 0 01-2 2H6a2 2 0 01-2-2v-1z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 19a2 2 0 012-2h12a2 2 0 012 2v0a2 2 0 01-2 2H6a2 2 0 01-2-2v0z"/>
+          </svg>
+        </div>
+        <div>
+          <div class="text-sm font-bold text-[#1A1A1A]">Vector DB 현황</div>
+          <div class="text-[11px] text-[#888]">Qdrant · 여행 도메인 데이터 현황</div>
+        </div>
+        <button id="btnDbModalClose" class="ml-auto h-8 w-8 flex items-center justify-center rounded-lg text-[#888] hover:bg-[#F5F5F5] transition">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- 모달 본문 -->
+      <div id="dbModalBody" class="px-5 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
+        <!-- JS 로 채워짐 -->
+        <div class="flex items-center justify-center py-10">
+          <div class="dot-anim"><span></span><span></span><span></span></div>
+          <span class="ml-3 text-sm text-[#888]">데이터 불러오는 중...</span>
+        </div>
+      </div>
+
     </div>
   </div>
 </div>

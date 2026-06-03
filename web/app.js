@@ -5,6 +5,8 @@
   const LS_KEY = 'mind_med_law_rag_v1';
   const ASK_PATH = '/ask';
 
+  let _travelMap = null;
+
   // ── 도메인 정의 ────────────────────────────────────────────────────
   const DOMAINS = [
     {
@@ -151,6 +153,11 @@
     defaultDomain: $('#defaultDomain'),
     btnSave:       $('#btnSave'),
     btnReset:      $('#btnReset'),
+    // DB현황 모달
+    btnDbStatus:      $('#btnDbStatus'),
+    dbModal:          $('#dbModal'),
+    dbModalBody:      $('#dbModalBody'),
+    btnDbModalClose:  $('#btnDbModalClose'),
   };
 
   init();
@@ -213,9 +220,14 @@
     els.btnSave.addEventListener('click', saveSettings);
     els.btnReset.addEventListener('click', resetSettings);
 
+    // DB현황 모달
+    if (els.btnDbStatus)     els.btnDbStatus.addEventListener('click', openDbModal);
+    if (els.btnDbModalClose) els.btnDbModalClose.addEventListener('click', closeDbModal);
+    if (els.dbModal) els.dbModal.addEventListener('click', (e) => { if (e.target === els.dbModal) closeDbModal(); });
+
     // 키보드
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') { closeLeftPanel(); closeRightPanel(); closeModal(); }
+      if (e.key === 'Escape') { closeLeftPanel(); closeRightPanel(); closeModal(); closeDbModal(); }
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') submitQuery();
     });
   }
@@ -312,10 +324,10 @@
     else      btn.classList.add('panel-btn-active');
   }
 
-  const _LEFT_W  = '260px';
+  const _LEFT_W  = '280px';
   const _LEFT_W0 = '0px';
-  const _RIGHT_W_PC  = '360px';
-  const _RIGHT_W_TAB = '340px';
+  const _RIGHT_W_PC  = '400px';
+  const _RIGHT_W_TAB = '380px';
   const _RIGHT_W0 = '0px';
 
   function _rightDefaultW() {
@@ -477,18 +489,266 @@
     }
   }
 
+  // ── 여행 도메인 헬퍼 ─────────────────────────────────────────────────
+
+  function isTravelCitations(citations) {
+    return citations.length > 0 && citations[0].domain_name === '여행';
+  }
+
+  function parseTravelStats(text) {
+    const t = text || '';
+    const stats = [];
+    let m;
+    if ((m = t.match(/방문 만족도:\s*([\d.]+)/))) stats.push(`⭐ ${m[1]}/5`);
+    if ((m = t.match(/재방문 의향:\s*([\d.]+)/))) stats.push(`🔄 재방문 ${m[1]}/5`);
+    if ((m = t.match(/추천 의향:\s*([\d.]+)/))) stats.push(`👍 추천 ${m[1]}/5`);
+    if ((m = t.match(/평균 체류시간:\s*([\d]+)분/))) stats.push(`⏱ ${m[1]}분`);
+    if ((m = t.match(/데이터 방문 횟수:\s*([\d]+)회/))) stats.push(`👥 ${m[1]}회`);
+    if ((m = t.match(/방문지 수:\s*([\d]+)곳/))) stats.push(`📍 ${m[1]}곳`);
+    if ((m = t.match(/등록 사진 수:\s*([\d]+)장/))) stats.push(`📷 ${m[1]}장`);
+    return stats.slice(0, 5);
+  }
+
+  function hasValidCoords(item) {
+    const lat = parseFloat(item.y_coord);
+    const lng = parseFloat(item.x_coord);
+    return !isNaN(lat) && !isNaN(lng) && lat > 30 && lat < 40 && lng > 120 && lng < 135;
+  }
+
+  // 여행 코스 텍스트에서 경유지 배열 추출
+  function parseRouteStops(excerpt) {
+    const m = (excerpt || '').match(/여행 코스:\s*(.+?)(?:\s+여행 지역:|\s+방문지 유형:|$)/);
+    if (!m) return [];
+    return m[1].split('→').map(s => s.trim()).filter(Boolean);
+  }
+
+  // 여행 코스 텍스트에서 지역명 추출
+  function parseRouteCity(excerpt) {
+    const m = (excerpt || '').match(/여행 지역:\s*(.+?)(?:\s+방문지 유형:|\s+주요 이동수단:|$)/);
+    return m ? m[1].trim() : '';
+  }
+
+  function renderTravelCitations(citations) {
+    if (_travelMap) { _travelMap.remove(); _travelMap = null; }
+
+    const withCoords = citations.filter(hasValidCoords);
+    const VIS_ICON = {
+      '관광지': '🏛', '음식점': '🍽', '숙박': '🏨', '쇼핑': '🛍',
+      '문화시설': '🎭', '레저': '🎯', '스포츠': '⚽', '자연': '🌿',
+      '역사': '🏯', '공원': '🌳', '관광사진 캡션': '📷', '여행 코스': '🗺',
+    };
+
+    let html = '';
+
+    // ── 지도 패널 (항상 표시) ──────────────────────────────────────────
+    html += `
+      <div class="rounded-xl overflow-hidden border border-[#BAE0FF] mb-3 shadow-sm" style="height:220px;position:relative;">
+        <div id="travelMap" style="height:100%;width:100%;"></div>
+        <div class="absolute bottom-2 right-2 z-[400] rounded-lg bg-white/90 backdrop-blur px-2 py-1 text-[10px] text-[#555] shadow">
+          © <a href="https://www.openstreetmap.org/copyright" target="_blank" class="text-[#5B9CFF]">OpenStreetMap</a>
+        </div>
+        ${withCoords.length === 0 ? `<div class="absolute top-2 left-1/2 -translate-x-1/2 z-[400] rounded-lg bg-white/90 backdrop-blur px-3 py-1 text-[11px] text-[#888] shadow whitespace-nowrap">📍 GPS 좌표 없음 — 아래 버튼으로 지도 연결</div>` : ''}
+      </div>
+    `;
+
+    // ── 장소 카드 ──────────────────────────────────────────────
+    html += citations.map((item, idx) => {
+      const pName    = item.place_name || item.doc_id || `장소 ${idx + 1}`;
+      const address  = item.source_spec || '';
+      const visType  = item.vis_type || '';
+      const stats    = parseTravelStats(item.excerpt);
+      const coordsOk = hasValidCoords(item);
+      const lat      = coordsOk ? parseFloat(item.y_coord) : null;
+      const lng      = coordsOk ? parseFloat(item.x_coord) : null;
+      const isRoute  = visType.includes('코스');
+
+      // 루트 타입: 개별 경유지 파싱
+      const routeStops = isRoute ? parseRouteStops(item.excerpt) : [];
+      const cityStr    = isRoute ? (address || parseRouteCity(item.excerpt)) : address;
+      // 지도 검색어: 좌표 없으면 첫 경유지 또는 장소명 사용
+      const mapQuery   = isRoute ? (routeStops[0] || cityStr || pName) : (pName.length > 30 ? address || pName : pName);
+
+      // 카카오맵: 좌표 있으면 위치 링크, 없으면 장소 검색 (map.kakao.com)
+      const kakaoUrl = coordsOk
+        ? `https://map.kakao.com/link/map/${encodeURIComponent(mapQuery)},${lat},${lng}`
+        : `https://map.kakao.com/?q=${encodeURIComponent(mapQuery)}`;
+      // 네이버지도: 좌표 있으면 좌표 이동, 없으면 검색
+      const naverUrl = coordsOk
+        ? `https://map.naver.com/v5/?lat=${lat}&lng=${lng}&zoom=16`
+        : `https://map.naver.com/v5/search/${encodeURIComponent(mapQuery)}`;
+      const imgUrl   = `https://search.naver.com/search.naver?query=${encodeURIComponent(mapQuery + ' 여행')}&where=image`;
+
+      const typeIcon  = Object.entries(VIS_ICON).find(([k]) => visType.includes(k))?.[1] || '📍';
+      const typeColor = isRoute ? '#7C3AED'
+                      : visType.includes('캡션') ? '#0891B2'
+                      : '#0EA5E9';
+
+      // 루트 경유지 칩
+      const routeChips = isRoute && routeStops.length > 0 ? `
+        <div class="flex flex-wrap gap-1 items-center mb-2">
+          ${routeStops.slice(0, 5).map((stop, i) => `
+            ${i > 0 ? '<span class="text-[#CCC] text-[10px] select-none">→</span>' : ''}
+            <a href="https://map.kakao.com/?q=${encodeURIComponent(stop)}" target="_blank" rel="noreferrer"
+              class="rounded-full bg-[#F5F3FF] border border-[#DDD6FE] px-2 py-0.5 text-[10px] text-[#7C3AED] hover:bg-[#EDE9FE] transition">${escapeHtml(stop)}</a>
+          `).join('')}
+          ${routeStops.length > 5 ? `<span class="text-[10px] text-[#AAA]">+${routeStops.length - 5}곳</span>` : ''}
+        </div>
+      ` : '';
+
+      const cardTitle = isRoute
+        ? escapeHtml((routeStops.slice(0, 2).join(' → ')) || pName)
+        : escapeHtml(pName);
+
+      return `
+        <article class="rounded-xl border border-[#EBEBEB] bg-white overflow-hidden hover:border-[#BAE0FF] hover:shadow-sm transition">
+          <!-- 이미지/플레이스홀더 -->
+          <div class="relative" style="height:110px;background:linear-gradient(135deg,${typeColor}18,${typeColor}35);">
+            <img id="wikiimg-${idx}" src="" alt=""
+              class="w-full h-full object-cover hidden"
+              onerror="this.style.display='none';document.getElementById('ph-${idx}').style.display='flex'"/>
+            <div id="ph-${idx}" class="absolute inset-0 flex flex-col items-center justify-center gap-1.5">
+              <span class="text-3xl">${typeIcon}</span>
+              <span class="text-[10px] font-medium text-white rounded-full px-2 py-0.5"
+                style="background:${typeColor}bb">${escapeHtml(visType || '관광지')}</span>
+            </div>
+            <span class="absolute top-2 left-2 h-6 w-6 flex items-center justify-center rounded-full bg-white/90 backdrop-blur text-[11px] font-bold shadow"
+              style="color:${typeColor}">${idx + 1}</span>
+            ${coordsOk ? `<span class="absolute top-2 right-2 rounded-full bg-white/90 backdrop-blur px-2 py-0.5 text-[10px] font-medium text-[#0EA5E9]">📍 GPS</span>` : ''}
+            ${cityStr && !coordsOk ? `<span class="absolute bottom-2 left-2 rounded-full bg-white/80 backdrop-blur px-2 py-0.5 text-[10px] text-[#555]">🗾 ${escapeHtml(cityStr)}</span>` : ''}
+          </div>
+
+          <!-- 정보 -->
+          <div class="p-3">
+            <div class="text-sm font-semibold text-[#1A1A1A] mb-1 leading-5" style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical">${cardTitle}</div>
+
+            ${routeChips}
+
+            ${!isRoute && address ? `
+            <div class="flex items-start gap-1 mb-2">
+              <svg class="h-3 w-3 shrink-0 text-[#AAA] mt-[2px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+              </svg>
+              <span class="text-[11px] text-[#777] leading-4">${escapeHtml(address)}</span>
+            </div>` : ''}
+
+            ${stats.length ? `
+            <div class="flex flex-wrap gap-1 mb-2">
+              ${stats.map(s => `<span class="rounded-full bg-[#F0F9FF] border border-[#BAE0FF] px-2 py-0.5 text-[10px] text-[#0369A1]">${escapeHtml(s)}</span>`).join('')}
+            </div>` : ''}
+
+            <!-- 외부 링크 버튼 -->
+            <div class="flex gap-1.5 flex-wrap">
+              <a href="${kakaoUrl}" target="_blank" rel="noreferrer"
+                class="flex items-center gap-1 rounded-lg bg-[#FEE500] px-2.5 py-1.5 text-[11px] font-medium text-[#3C1E1E] hover:brightness-95 transition">
+                🗺 카카오맵
+              </a>
+              <a href="${naverUrl}" target="_blank" rel="noreferrer"
+                class="flex items-center gap-1 rounded-lg bg-[#03C75A] px-2.5 py-1.5 text-[11px] font-medium text-white hover:brightness-95 transition">
+                N 네이버지도
+              </a>
+              <a href="${imgUrl}" target="_blank" rel="noreferrer"
+                class="flex items-center gap-1 rounded-lg border border-[#E3E3E3] bg-[#F9FAFB] px-2.5 py-1.5 text-[11px] font-medium text-[#555] hover:bg-[#F0F0F0] transition">
+                🖼 이미지
+              </a>
+            </div>
+          </div>
+        </article>
+      `;
+    }).join('');
+
+    els.citations.innerHTML = html;
+
+    // Wikipedia 이미지 비동기 로드 (루트는 첫 경유지, 그 외 장소명)
+    citations.forEach((item, idx) => {
+      const isRoute = (item.vis_type || '').includes('코스');
+      const stops   = isRoute ? parseRouteStops(item.excerpt) : [];
+      const name    = stops[0] || item.place_name;
+      if (name) loadWikiImage(name, idx);
+    });
+
+    // Leaflet 지도 초기화 (항상 — 좌표 없으면 한국 전체 뷰)
+    requestAnimationFrame(() => initTravelMap(withCoords));
+  }
+
+  async function loadWikiImage(placeName, idx) {
+    const imgEl = document.getElementById(`wikiimg-${idx}`);
+    const ph    = document.getElementById(`ph-${idx}`);
+    if (!imgEl) return;
+    try {
+      const params = new URLSearchParams({
+        action: 'query', titles: placeName, prop: 'pageimages',
+        format: 'json', pithumbsize: '400', origin: '*',
+      });
+      const resp = await fetch(`https://ko.wikipedia.org/w/api.php?${params}`);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const page = Object.values(data?.query?.pages || {})[0];
+      if (page?.thumbnail?.source) {
+        imgEl.src = page.thumbnail.source;
+        imgEl.style.display = 'block';
+        if (ph) ph.style.display = 'none';
+      }
+    } catch { /* silent fallback */ }
+  }
+
+  function initTravelMap(places) {
+    if (typeof L === 'undefined') return;
+    const mapEl = document.getElementById('travelMap');
+    if (!mapEl) return;
+
+    _travelMap = L.map('travelMap', { zoomControl: true, attributionControl: false });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+    }).addTo(_travelMap);
+
+    // 좌표 없는 경우: 한국 전체 뷰
+    if (!places || places.length === 0) {
+      _travelMap.setView([36.5, 127.8], 7);
+      return;
+    }
+
+    const bounds = [];
+    places.forEach((p, i) => {
+      const lat = parseFloat(p.y_coord);
+      const lng = parseFloat(p.x_coord);
+
+      const icon = L.divIcon({
+        html: `<div style="background:#0EA5E9;color:#fff;border:2px solid #fff;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;box-shadow:0 1px 5px rgba(0,0,0,.35)">${i + 1}</div>`,
+        className: '',
+        iconSize: [26, 26],
+        iconAnchor: [13, 13],
+      });
+
+      const pName = p.place_name || p.doc_id || `장소 ${i + 1}`;
+      L.marker([lat, lng], { icon })
+        .addTo(_travelMap)
+        .bindPopup(`<b>${escapeHtml(pName)}</b>${p.source_spec ? '<br><span style="font-size:11px;color:#666">' + escapeHtml(p.source_spec) + '</span>' : ''}`);
+      bounds.push([lat, lng]);
+    });
+
+    if (bounds.length === 1) {
+      _travelMap.setView(bounds[0], 14);
+    } else {
+      _travelMap.fitBounds(bounds, { padding: [20, 20] });
+    }
+  }
+
   // ── 응답 렌더링 ───────────────────────────────────────────────────
   function renderResponse(data) {
-    const answer    = formatText(data?.answer || '응답이 비어 있습니다.');
     const citations = Array.isArray(data?.citations) ? data.citations : [];
     const used      = data?.used_collection || '-';
+    const isTravel  = isTravelCitations(citations);
+    const answer    = formatAnswer(data?.answer || '응답이 비어 있습니다.', isTravel);
 
     els.answerBox.innerHTML = answer;
+    els.answerBox.classList.add('answer-animate');
     els.usedCollectionBadge.textContent = `collection: ${used}`;
     els.citationCount.textContent       = `${citations.length}건`;
     els.citationCountPanel.textContent  = `${citations.length}건`;
 
     if (!citations.length) {
+      if (_travelMap) { _travelMap.remove(); _travelMap = null; }
       els.citations.innerHTML = `
         <div class="rounded-xl border border-dashed border-[#E3E3E3] px-4 py-6 text-xs leading-6 text-[#BBB] text-center">
           조회된 근거가 없습니다.
@@ -496,17 +756,22 @@
       return;
     }
 
-    els.citations.innerHTML = citations.map((item, idx) => `
-      <article class="rounded-xl border border-[#EBEBEB] bg-[#FAFAFA] p-4 hover:border-[#C7D7FF] transition">
-        <div class="flex flex-wrap items-center gap-1.5 mb-2.5">
-          <span class="h-5 w-5 flex items-center justify-center rounded-full bg-[#5B9CFF] text-[10px] font-bold text-white shrink-0">${idx + 1}</span>
-          <span class="text-xs font-semibold text-[#1A1A1A] truncate max-w-[140px]">${escapeHtml(item.doc_id || '-')}</span>
-          <span class="rounded-full bg-white border border-[#E3E3E3] px-2 py-0.5 text-[10px] font-medium text-[#666]">${escapeHtml(item.domain_name || 'unknown')}</span>
-          ${item.source_spec ? `<span class="rounded-full bg-white border border-[#E3E3E3] px-2 py-0.5 text-[10px] font-medium text-[#999]">${escapeHtml(item.source_spec)}</span>` : ''}
-        </div>
-        <div class="text-xs leading-6 text-[#555]">${formatText(item.excerpt || '')}</div>
-      </article>
-    `).join('');
+    if (isTravel) {
+      renderTravelCitations(citations);
+    } else {
+      if (_travelMap) { _travelMap.remove(); _travelMap = null; }
+      els.citations.innerHTML = citations.map((item, idx) => `
+        <article class="rounded-xl border border-[#EBEBEB] bg-[#FAFAFA] p-4 hover:border-[#C7D7FF] transition">
+          <div class="flex flex-wrap items-center gap-1.5 mb-2.5">
+            <span class="h-5 w-5 flex items-center justify-center rounded-full bg-[#5B9CFF] text-[10px] font-bold text-white shrink-0">${idx + 1}</span>
+            <span class="text-xs font-semibold text-[#1A1A1A] truncate max-w-[140px]">${escapeHtml(item.doc_id || '-')}</span>
+            <span class="rounded-full bg-white border border-[#E3E3E3] px-2 py-0.5 text-[10px] font-medium text-[#666]">${escapeHtml(item.domain_name || 'unknown')}</span>
+            ${item.source_spec ? `<span class="rounded-full bg-white border border-[#E3E3E3] px-2 py-0.5 text-[10px] font-medium text-[#999]">${escapeHtml(item.source_spec)}</span>` : ''}
+          </div>
+          <div class="text-xs leading-6 text-[#555]">${formatText(item.excerpt || '')}</div>
+        </article>
+      `).join('');
+    }
 
     if (window.innerWidth < 768) openRightPanel();
   }
@@ -648,10 +913,164 @@
     toast._t = setTimeout(() => setStatus('', false), 2200);
   }
 
+  // ── DB현황 모달 ───────────────────────────────────────────────────
+
+  function openDbModal() {
+    els.dbModal.classList.remove('hidden');
+    // 매번 열 때 최신 데이터 페치
+    els.dbModalBody.innerHTML = `
+      <div class="flex items-center justify-center py-10">
+        <div class="dot-anim"><span></span><span></span><span></span></div>
+        <span class="ml-3 text-sm text-[#888]">데이터 불러오는 중...</span>
+      </div>`;
+    fetchDbStatus();
+  }
+
+  function closeDbModal() {
+    els.dbModal.classList.add('hidden');
+  }
+
+  async function fetchDbStatus() {
+    try {
+      const res  = await fetch(apiUrl('/api/travel-db-status'));
+      const data = await res.json();
+      if (data.error) {
+        els.dbModalBody.innerHTML = `
+          <div class="rounded-xl border border-[#FECACA] bg-[#FFF5F5] px-4 py-4 text-sm text-[#DC2626]">
+            ⚠️ ${escapeHtml(data.error)}
+          </div>`;
+        return;
+      }
+      renderDbStatus(data);
+    } catch (err) {
+      els.dbModalBody.innerHTML = `
+        <div class="rounded-xl border border-[#FECACA] bg-[#FFF5F5] px-4 py-4 text-sm text-[#DC2626]">
+          ⚠️ 데이터를 불러오지 못했습니다: ${escapeHtml(err?.message || '')}
+        </div>`;
+    }
+  }
+
+  function renderDbStatus(d) {
+    const travel   = d.travel  || {};
+    const total    = travel.total   || 0;
+    const route    = travel.route   || 0;
+    const caption  = travel.caption || 0;
+    const place    = travel.place   || 0;
+    const pct = (n) => total > 0 ? Math.round(n / total * 100) : 0;
+    const fmt = (n) => n.toLocaleString('ko-KR');
+
+    // 비율 바 색상
+    const BAR_COLORS = ['#0EA5E9', '#7C3AED', '#F59E0B'];
+
+    const segments = [
+      { label: '방문지·POI',    count: place,   color: BAR_COLORS[0], icon: '📍' },
+      { label: '여행 코스',     count: route,   color: BAR_COLORS[1], icon: '🗺' },
+      { label: '관광사진 캡션', count: caption, color: BAR_COLORS[2], icon: '📷' },
+    ];
+
+    // 비율 바 HTML
+    const barSegments = segments
+      .filter(s => s.count > 0)
+      .map(s => `<div style="width:${pct(s.count)}%;background:${s.color};min-width:${s.count > 0 ? 4 : 0}px" class="h-full rounded-full transition-all"></div>`)
+      .join('');
+
+    els.dbModalBody.innerHTML = `
+
+      <!-- 컬렉션 기본 정보 -->
+      <div class="rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] px-4 py-3">
+        <div class="text-[11px] font-semibold uppercase tracking-widest text-[#AAA] mb-2">컬렉션 정보</div>
+        <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+          <div class="flex items-center gap-2">
+            <span class="text-[#AAA] text-[11px] w-20 shrink-0">컬렉션</span>
+            <code class="text-xs bg-[#F0F0F0] rounded px-1.5 py-0.5 text-[#333] font-mono">${escapeHtml(d.collection || '-')}</code>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-[#AAA] text-[11px] w-20 shrink-0">전체 포인트</span>
+            <span class="font-bold text-[#1A1A1A]">${fmt(d.total_points || 0)}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-[#AAA] text-[11px] w-20 shrink-0">벡터 차원</span>
+            <span class="font-semibold text-[#333]">${d.vector_size || '-'}<span class="text-[11px] text-[#AAA] ml-0.5">dims</span></span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-[#AAA] text-[11px] w-20 shrink-0">거리 함수</span>
+            <span class="rounded-full bg-[#EEF2FF] border border-[#C7D7FF] px-2 py-0.5 text-[11px] font-medium text-[#5B9CFF]">${escapeHtml(d.distance || '-')}</span>
+          </div>
+          <div class="col-span-2 flex items-start gap-2">
+            <span class="text-[#AAA] text-[11px] w-20 shrink-0 mt-0.5">임베딩 모델</span>
+            <code class="text-[11px] bg-[#F0F0F0] rounded px-1.5 py-0.5 text-[#555] font-mono break-all">${escapeHtml(d.embed_model || '-')}</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- 여행 도메인 통계 -->
+      <div class="rounded-xl border border-[#BAE0FF] bg-[#F0F9FF] px-4 py-4">
+        <div class="flex items-center gap-2 mb-3">
+          <span class="text-lg">✈️</span>
+          <span class="text-[11px] font-semibold uppercase tracking-widest text-[#0369A1]">여행 도메인</span>
+        </div>
+
+        <!-- 총 포인트 큰 숫자 -->
+        <div class="flex items-end gap-2 mb-4">
+          <span class="text-4xl font-black text-[#0EA5E9] leading-none">${fmt(total)}</span>
+          <span class="text-sm text-[#0369A1] mb-1">포인트</span>
+          <span class="ml-auto text-[11px] text-[#0369A1]">전체의 ${pct(total)}%</span>
+        </div>
+
+        <!-- 비율 바 -->
+        <div class="flex gap-0.5 h-3 rounded-full overflow-hidden bg-[#E0F2FE] mb-3">
+          ${barSegments || '<div class="w-full h-full bg-[#E0F2FE]"></div>'}
+        </div>
+
+        <!-- 세그먼트 상세 -->
+        <div class="grid grid-cols-3 gap-2">
+          ${segments.map(s => `
+            <div class="rounded-lg bg-white border border-[#E5E5E5] px-3 py-2.5 text-center">
+              <div class="text-xl mb-0.5">${s.icon}</div>
+              <div class="text-xs font-bold text-[#1A1A1A]">${fmt(s.count)}</div>
+              <div class="text-[10px] text-[#888] leading-3 mt-0.5">${escapeHtml(s.label)}</div>
+              <div class="mt-1 h-1 rounded-full" style="background:${s.color};opacity:0.4;width:${pct(s.count)}%;min-width:${s.count>0?8:0}px;margin:4px auto 0"></div>
+              <div class="text-[10px] font-medium mt-0.5" style="color:${s.color}">${pct(s.count)}%</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      <!-- 데이터 소스 -->
+      <div class="rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] px-4 py-3 flex items-start gap-3">
+        <svg class="h-4 w-4 shrink-0 text-[#AAA] mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <div class="text-[11px] text-[#777] leading-5">
+          <span class="font-semibold text-[#555]">데이터 출처:</span> AI Hub 한국관광 데이터셋 (개방데이터)<br>
+          인제스트 스크립트: <code class="bg-[#F0F0F0] rounded px-1 font-mono">ingest_travel_qdrant.py</code> · <code class="bg-[#F0F0F0] rounded px-1 font-mono">ingest_travel_enrich_qdrant.py</code>
+        </div>
+      </div>
+
+    `;
+  }
+
   function formatText(value) {
     return escapeHtml(String(value || ''))
       .replace(/\n{2,}/g, '\n\n')
       .replace(/\n/g, '<br/>');
+  }
+
+  function formatAnswer(text, isTravel) {
+    let s = escapeHtml(String(text || ''));
+    // **bold** → <strong>
+    s = s.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-[#1A1A1A]">$1</strong>');
+    // [숫자] citation badge
+    s = s.replace(/\[(\d+)\]/g,
+      '<span class="inline-flex items-center justify-center rounded-full bg-[#EEF2FF] border border-[#C7D7FF] px-1.5 text-[10px] font-bold text-[#5B9CFF] mx-0.5">$1</span>');
+    if (isTravel) {
+      // - 으로 시작하는 줄 → 예쁜 bullet
+      s = s.replace(/^- (.+)$/gm,
+        '<div class="flex gap-2 items-start py-0.5"><span style="color:#0EA5E9;margin-top:2px;flex-shrink:0">●</span><span>$1</span></div>');
+    }
+    s = s.replace(/\n{2,}/g, '<br/><br/>');
+    s = s.replace(/\n/g, '<br/>');
+    return s;
   }
 
   function escapeHtml(str) {

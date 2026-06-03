@@ -30,6 +30,7 @@ from .db.qdrant import (
     qdrant_ping,
     qdrant_point_count,
     qdrant_search,
+    travel_db_stats,
     QDRANT_URL,
     QDRANT_COLLECTION,
 )
@@ -137,6 +138,12 @@ class Citation(BaseModel):
     source_spec: Optional[str] = None
     creation_year: Optional[str] = None
     excerpt: str
+    # Travel-specific (populated when domain_name == "여행")
+    place_name: Optional[str] = None
+    x_coord: Optional[str] = None
+    y_coord: Optional[str] = None
+    vis_type: Optional[str] = None
+    visit_count: Optional[int] = None
 
 
 class AskResponse(BaseModel):
@@ -338,13 +345,24 @@ async def ask(req: AskRequest, db: Session = Depends(get_db)):
     for h in hits:
         pl = h["payload"]
         excerpt = re.sub(r"\s+", " ", (pl.get("text") or "").strip())
+        pl_domain = str(pl.get("domain_name") or "unknown")
+        is_travel_cite = pl_domain in TRAVEL_DOMAINS
+        try:
+            vc: Optional[int] = int(pl.get("visit_count") or 0) or None
+        except (ValueError, TypeError):
+            vc = None
         citations.append(
             Citation(
                 doc_id=str(pl.get("doc_id")),
-                domain_name=str(pl.get("domain_name") or "unknown"),
+                domain_name=pl_domain,
                 source_spec=pl.get("source_spec"),
                 creation_year=pl.get("creation_year"),
                 excerpt=excerpt[:480] + ("..." if len(excerpt) > 480 else ""),
+                place_name=pl.get("place_name") if is_travel_cite else None,
+                x_coord=(str(pl.get("x_coord") or "") or None) if is_travel_cite else None,
+                y_coord=(str(pl.get("y_coord") or "") or None) if is_travel_cite else None,
+                vis_type=(str(pl.get("vis_type") or "") or None) if is_travel_cite else None,
+                visit_count=vc if is_travel_cite else None,
             )
         )
 
@@ -454,6 +472,17 @@ def openai_check(req: OpenAICheckRequest):
             key_loaded=False,
             message=f"OpenAI 체크 실패: {str(e)}",
         )
+
+
+@app.get("/api/travel-db-status")
+async def travel_db_status_endpoint():
+    """여행 도메인 Vector DB 현황 조회."""
+    if not USE_QDRANT:
+        return {"error": "Qdrant가 비활성화 상태입니다."}
+    try:
+        return await travel_db_stats()
+    except Exception as exc:
+        return {"error": str(exc)}
 
 
 @app.get("/healthz")

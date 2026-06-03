@@ -1,20 +1,20 @@
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+<link rel=”stylesheet” href=”https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css” />
 
-# Mind · Med · Law RAG (심리상담·의료·법률 도메인 RAG + 자동평가)
+# Mind · Med · Law · Travel RAG (심리상담·의료·법률·여행 도메인 RAG + 자동평가)
 
 ## AI 학습 데이터는 AI Hub 공공기관 사이트에서 다운로드 가능합니다.
 
+![alt text](./docs/image.png)
 
-
-이 레포는 **심리상담·의료·법률 도메인 문서 데이터**를 이용해,
+이 레포는 **심리상담·의료·법률·여행 도메인 문서 데이터**를 이용해,
 - (1) 공통 스키마로 **정규화(JSONL)** 하고
 - (2) 문서를 직접 읽는 **경량 텍스트 검색 API(FastAPI)** 를 제공하며
 - (3) PC/태블릿/모바일 **반응형 3단 웹 UI** 로 질의·근거 조회를 지원하며
 - (4) 라벨링 QA로 **자동 평가(Eval)** 를 돌릴 수 있는 MVP입니다.
 
-> <i class="fa-solid fa-circle-check"></i> “폴더 = 도메인” 구조를 그대로 활용하도록 설계했습니다.
+> <i class=”fa-solid fa-circle-check”></i> “폴더 = 도메인” 구조를 그대로 활용하도록 설계했습니다.
 
-지원 도메인: `02.법률` | `01.의료` | `우울증` | `불안장애` | `중독` | `일반군`
+지원 도메인: `02.법률` | `01.의료` | `우울증` | `불안장애` | `중독` | `일반군` | `여행`
 
 ---
 
@@ -122,7 +122,77 @@ python3 scripts/ingest_counseling.py --data-root DATA_ROOT --out data/documents.
 
 ---
 
-## 5) 자동 평가(Eval)
+## 5) 여행 데이터 수집 및 Qdrant 인제스트
+
+### 데이터 위치 (AI Hub: 한국관광 데이터)
+
+```
+travel/
+  3.개방데이터/
+    1.데이터/
+      Training/
+        01.원천데이터/    TS_photo.zip          ← 훈련 관광사진
+        02.라벨링데이터/  TL_csv.zip            ← 방문지·여행 코스 CSV
+                          TL_gps_data.zip       ← 여행자 GPS 이동 데이터
+      Validation/
+        01.원천데이터/    VS_photo.zip          ← 검증 관광사진
+        02.라벨링데이터/  VL_csv.zip            ← 검증 방문지·여행 코스 CSV
+                          VL_gps_data.zip       ← 검증 GPS 데이터
+      Sublabel/           SbL.zip               ← 관광사진 JSON 캡션
+      Other/              Other.zip             ← 전국 POI 마스터
+```
+
+### 5-1. 기본 인제스트 (방문지 통계)
+
+`TL_csv.zip` + `VL_csv.zip`의 방문지 정보를 장소 단위로 집계해 Qdrant에 업로드합니다.
+
+```bash
+python scripts/ingest_travel_qdrant.py [--qdrant http://localhost:6333]
+```
+
+- 방문 횟수·만족도·재방문 의향·추천 의향·평균 체류시간을 장소별로 집계
+- 집·사무실·회사·학교·병원 등 비관광지 자동 제외
+- Training + Validation 데이터 합산 처리
+
+### 5-2. 확장 인제스트 (캡션·코스·POI)
+
+3가지 추가 데이터 소스를 Qdrant에 보강합니다.
+
+```bash
+python scripts/ingest_travel_enrich_qdrant.py [--qdrant http://localhost:6333] [--poi-limit 50000]
+```
+
+| Phase | 소스 파일 | 내용 |
+|-------|-----------|------|
+| Phase 1 | `SbL.zip` | 관광사진 JSON 캡션 → 장소별 자연어 설명 |
+| Phase 2 | `TL/VL_csv.zip` + GPS | TRAVEL_ID 단위 방문 순서를 여행 코스 문서로 변환 |
+| Phase 3 | `Other.zip` | 전국 POI 마스터 (최대 `--poi-limit`건, 기본 50,000) |
+
+### Qdrant 컬렉션 스펙
+
+| 항목 | 값 |
+|------|----|
+| 컬렉션명 | `domain_docs` |
+| 임베딩 모델 | `paraphrase-multilingual-MiniLM-L12-v2` |
+| 벡터 차원 | 384 |
+| 거리 함수 | Cosine |
+| 주요 payload 필드 | `domain_name`, `place_name`, `address`, `x_coord`, `y_coord`, `vis_type`, `visit_count`, `source_spec` |
+
+### API 호출 예시 (여행 도메인)
+
+```bash
+curl -X POST http://localhost:8000/ask \
+  -H "Content-Type: application/json" \
+  -d '{"query":"서울 근교 가족 여행지 추천해줘","domain":"여행"}'
+```
+
+- `domain_name=여행` 필터로 Qdrant 벡터 검색 수행
+- LLM 설정 시: 관광지명·주소·만족도·체류시간 등을 활용한 자연어 추천 생성
+- LLM 미설정 시: 관련 관광지 목록(장소명·주소·요약)을 직접 반환
+
+---
+
+## 6) 자동 평가(Eval)
 라벨링 QA(JSONL)를 이용해 기본 성능을 점검합니다.
 
 ```bash
@@ -142,6 +212,9 @@ python3 eval/run_eval.py --qas data/qas.jsonl --out eval_report.json
 | `scripts/normalize.py` | 범용 DATA_ROOT → `documents.jsonl` / `qas.jsonl` 변환기 |
 | `scripts/ingest_counseling.py` | 심리상담(우울증·불안장애·중독·일반군) 전용 JSONL 변환기 |
 | `scripts/index_qdrant.py` | 문서 유효성 검증 유틸 (Qdrant 없이 경량 검색 모드 안내) |
+| `scripts/ingest_travel_qdrant.py` | 여행 방문지 CSV(TL/VL) → 장소 단위 집계 후 Qdrant 업서트 |
+| `scripts/ingest_travel_enrich_qdrant.py` | 관광사진 캡션(SbL) + 여행 코스 + POI 마스터 → Qdrant 보강 인제스트 |
+| `travel/` | AI Hub 한국관광 데이터 원본 (훈련/검증 CSV·GPS·사진·POI, git 추적 제외) |
 | `alembic/` | SQLAlchemy 데이터베이스 마이그레이션 관리. `alembic upgrade head` 로 스키마 적용 |
 | `alembic/versions/` | 버전별 마이그레이션 파일 (자동 생성) |
 | `eval/` | RAG 정답 품질 자동 평가 모듈 |
