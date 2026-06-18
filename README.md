@@ -1,5 +1,6 @@
 <link rel=”stylesheet” href=”https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css” />
 
+
 # Mind · Med · Law · Travel RAG (심리상담·의료·법률·여행 도메인 RAG + 자동평가)
 
 ## AI 학습 데이터는 AI Hub 공공기관 사이트에서 다운로드 가능합니다.
