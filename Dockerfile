@@ -12,9 +12,9 @@ RUN pip install --upgrade pip \
     && pip install -r requirements.txt
 
 # 임베딩 모델을 빌드 시점에 미리 다운로드 (시작 시 지연 방지)
-RUN python -c "\
-from sentence_transformers import SentenceTransformer; \
-SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')"
+# RUN python -c "\
+# from sentence_transformers import SentenceTransformer; \
+# SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')"
 
 COPY api ./api
 COPY web ./web

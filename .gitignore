@@ -11,3 +11,5 @@ qdrant_data/
 .claude/
 .codex
 travel/
+
+*.pem

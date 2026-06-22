@@ -193,7 +193,72 @@ curl -X POST http://localhost:8000/ask \
 
 ---
 
-## 6) 자동 평가(Eval)
+## 6) AWS EC2 배포
+
+현재 단일 서버 배포는 `Amazon Linux 2023 + t3.medium` 기준으로 검증했습니다.
+구성은 `Nginx(80) -> FastAPI(8000) -> Qdrant(127.0.0.1:6333)` 이며,
+앱 데이터는 `data/documents.jsonl`, 벡터 인덱스는 Qdrant 로컬 스토리지를 사용합니다.
+
+### 6-1. 배포 아키텍처
+
+```mermaid
+flowchart LR
+    U[사용자 브라우저]
+    N[Nginx :80]
+    F[FastAPI / Uvicorn :8000]
+    Q[Qdrant :6333]
+    D[data/documents.jsonl]
+    M[SentenceTransformer 모델 캐시]
+
+    U --> N
+    N --> F
+    F --> Q
+    F --> D
+    F --> M
+```
+
+### 6-2. 서버 배포 절차
+
+```mermaid
+flowchart TD
+    A[EC2 생성<br/>Amazon Linux 2023] --> B[보안그룹 오픈<br/>80/tcp]
+    B --> C[repo 필수 파일 업로드<br/>api web data scripts requirements.txt]
+    C --> D[배포 스크립트 실행<br/>scripts/deploy_ec2_qdrant_fastapi.sh]
+    D --> E[Python 3.12 / venv / 의존성 설치]
+    E --> F[Qdrant 바이너리 설치]
+    F --> G[systemd 서비스 등록<br/>aihub-rag-qdrant<br/>aihub-rag-fastapi]
+    G --> H[nginx 설치 및 80 -> 8000 프록시]
+    H --> I[documents.jsonl -> Qdrant 인덱싱]
+    I --> J[헬스체크<br/>curl /healthz]
+```
+
+### 6-3. 실행 예시
+
+```bash
+sudo APP_USER=ec2-user REPO_DIR=/home/ec2-user/aihub-rag \
+  WARM_MODEL=0 RUN_TRAVEL_INGEST=0 \
+  bash scripts/deploy_ec2_qdrant_fastapi.sh
+
+/opt/aihub-rag/venv/bin/python scripts/ingest_qdrant.py \
+  --qdrant http://127.0.0.1:6333 \
+  --data /home/ec2-user/aihub-rag/data/documents.jsonl
+```
+
+### 6-4. 운영 확인
+
+```bash
+systemctl status aihub-rag-qdrant.service
+systemctl status aihub-rag-fastapi.service
+systemctl status nginx
+
+curl http://127.0.0.1:8000/healthz
+curl http://127.0.0.1:6333/collections
+curl http://<EC2-PUBLIC-IP>/
+```
+
+---
+
+## 7) 자동 평가(Eval)
 라벨링 QA(JSONL)를 이용해 기본 성능을 점검합니다.
 
 ```bash
@@ -202,7 +267,7 @@ python3 eval/run_eval.py --qas data/qas.jsonl --out eval_report.json
 
 ---
 
-## 디렉터리 구조
+## 8) 디렉터리 구조
 
 | 경로 | 역할 |
 |------|------|
@@ -224,4 +289,3 @@ python3 eval/run_eval.py --qas data/qas.jsonl --out eval_report.json
 | `DATA_ROOT/` | AI Hub 원천·라벨링 데이터 원본 (git 추적 제외) |
 
 ---
-

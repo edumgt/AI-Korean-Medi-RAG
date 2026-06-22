@@ -255,7 +255,6 @@
         state.defaultDomain = val;
         persistState();
         renderRequestPreview();
-        closeLeftPanel();
       });
     });
   }
