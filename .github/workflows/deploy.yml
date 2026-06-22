@@ -1,0 +1,86 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      install_deps:
+        description: "OS 패키지 재설치 (0=skip, 1=install)"
+        required: false
+        default: "0"
+      install_qdrant:
+        description: "Qdrant 바이너리 재설치 (0=skip, 1=install)"
+        required: false
+        default: "0"
+      warm_model:
+        description: "임베딩 모델 사전 로드 (0=skip, 1=warm)"
+        required: false
+        default: "0"
+      run_travel_ingest:
+        description: "Travel 데이터 Qdrant 인제스트 (0=skip, 1=run)"
+        required: false
+        default: "0"
+
+env:
+  REPO_DIR: /home/ubuntu/aihub-rag
+  VENV_DIR: /opt/aihub-rag/venv
+  APP_ENV_FILE: /etc/aihub-rag/app.env
+  FASTAPI_SERVICE: aihub-rag-fastapi
+
+jobs:
+  deploy:
+    name: EC2 배포
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: EC2 SSH 배포
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ secrets.EC2_SSH_PORT || 22 }}
+          command_timeout: 30m
+          script: |
+            set -Eeuo pipefail
+
+            REPO_DIR="${{ env.REPO_DIR }}"
+            VENV_DIR="${{ env.VENV_DIR }}"
+            APP_ENV_FILE="${{ env.APP_ENV_FILE }}"
+
+            echo "========================================"
+            echo "[deploy] 1/4 소스 코드 업데이트"
+            echo "========================================"
+            cd "$REPO_DIR"
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "========================================"
+            echo "[deploy] 2/4 DB 마이그레이션 (Alembic)"
+            echo "========================================"
+            # app.env 에서 DATABASE_URL 등 환경변수 로드
+            if [[ -f "$APP_ENV_FILE" ]]; then
+              set -a
+              source "$APP_ENV_FILE"
+              set +a
+            fi
+            "$VENV_DIR/bin/python" -m alembic upgrade head
+
+            echo "========================================"
+            echo "[deploy] 3/4 배포 스크립트 실행"
+            echo "========================================"
+            INSTALL_DEPS="${{ github.event.inputs.install_deps || '0' }}" \
+            INSTALL_QDRANT="${{ github.event.inputs.install_qdrant || '0' }}" \
+            INSTALL_PYTHON_DEPS="1" \
+            WARM_MODEL="${{ github.event.inputs.warm_model || '0' }}" \
+            RUN_TRAVEL_INGEST="${{ github.event.inputs.run_travel_ingest || '0' }}" \
+            REPO_DIR="$REPO_DIR" \
+            sudo -E bash "$REPO_DIR/scripts/deploy_ec2_qdrant_fastapi.sh"
+
+            echo "========================================"
+            echo "[deploy] 4/4 서비스 상태 확인"
+            echo "========================================"
+            systemctl is-active aihub-rag-qdrant.service   || true
+            systemctl is-active aihub-rag-fastapi.service  || true
+            echo "[deploy] 배포 완료"

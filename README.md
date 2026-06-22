@@ -289,3 +289,16 @@ python3 eval/run_eval.py --qas data/qas.jsonl --out eval_report.json
 | `DATA_ROOT/` | AI Hub 원천·라벨링 데이터 원본 (git 추적 제외) |
 
 ---
+
+### AMI 로 저장 후 타인과 공유 ( Public 또는 Private 한 경우 AWS Account ID 로 공유)
+
+
+```bash
+aws ec2 run-instances \
+    --image-id ami-044b597f9d5cc927b \
+    --instance-type t3.micro \
+    --key-name "본인의-키페어-이름" \
+    --security-group-ids "sg-보안그룹ID" \
+    --subnet-id "subnet-서브넷ID" \
+    --region "AMI가-존재하는-리전코드"
+```
