@@ -1,0 +1,7 @@
+﻿{
+    "qa_id": 68129,
+    "domain": 15,
+    "q_type": 1,
+    "question": "10세 남자아이가 지속적인 두통과 구토를 호소하며 병원을 방문하였다. 신체검사에서 두개내압 상승 소견이 관찰되었고, 뇌 MRI에서 종양이 확인되었다. 가족력 조사에서 그의 모친이 35세에 유방암을 앓았고, 외조부는 45세에 골육종으로 사망한 이력이 있었다. 이 아이에게 의심되는 유전적 질환은 무엇인가?\n\n1) Neurofibromatosis type 1  \n2) Von Hippel-Lindau disease  \n3) Li-Fraumeni syndrome  \n4) Hereditary nonpolyposis colorectal cancer (HNPCC) \n5) Familial adenomatous polyposis (FAP)",
+    "answer": "3) Li-Fraumeni syndrome"
+}
