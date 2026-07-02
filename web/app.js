@@ -7,13 +7,14 @@
 
   let _travelMap = null;
 
-  // ── 도메인 정의 ────────────────────────────────────────────────────
+  // ── 도메인 정의 (group 단위로 세분화, offcanvas select에서 optgroup으로 표시) ──
   const DOMAINS = [
     {
       value: '02.법률',
       label: '법률',
       icon: '⚖',
       color: 'amber',
+      group: '전문분야',
       desc: '근로기준법, 계약, 판례 등 법률 문서 검색',
       example: '근로자 4인 이하 사업장에 근로기준법 일부만 적용되는 것이 왜 문제 되었나요?',
     },
@@ -22,6 +23,7 @@
       label: '의료',
       icon: '🩺',
       color: 'emerald',
+      group: '전문분야',
       desc: '의학 논문, 진료 가이드라인, 의료 기기 문서 검색',
       example: '엑스레이 장치의 디레이팅 모드는 어떤 상황에서 작동하나요?',
     },
@@ -30,6 +32,7 @@
       label: '우울증',
       icon: '💙',
       color: 'blue',
+      group: '심리상담',
       desc: '우울증 상담 사례 요약 및 대화록 검색',
       example: '우울증 내담자가 무기력감을 호소할 때 상담사가 활용하는 주요 개입 방법은 무엇인가요?',
     },
@@ -38,6 +41,7 @@
       label: '불안장애',
       icon: '🌊',
       color: 'cyan',
+      group: '심리상담',
       desc: '불안장애 상담 사례 요약 및 대화록 검색',
       example: '불안장애 내담자의 상담에서 인지 재구성 기법은 어떻게 적용되나요?',
     },
@@ -46,6 +50,7 @@
       label: '중독',
       icon: '🔗',
       color: 'purple',
+      group: '심리상담',
       desc: '중독 상담 사례(알코올·도박 등) 요약 및 대화록 검색',
       example: '알코올 중독 내담자의 동기 강화 상담에서 상담사가 주로 사용하는 접근법은?',
     },
@@ -54,6 +59,7 @@
       label: '일반군',
       icon: '🌿',
       color: 'teal',
+      group: '심리상담',
       desc: '일반 상담 사례(진로·관계·스트레스 등) 검색',
       example: '진로 고민을 가진 내담자에게 상담사가 정서를 다루는 방식은 무엇인가요?',
     },
@@ -62,14 +68,34 @@
       label: '여행',
       icon: '✈️',
       color: 'sky',
+      group: '여행',
       desc: '전국 관광지 방문 데이터 기반 여행 에이전트',
       example: '서울에서 가족과 함께 즐길 수 있는 역사·문화 관광지를 추천해줘',
+    },
+    {
+      value: '05.금융',
+      label: '금융',
+      icon: '💰',
+      color: 'gold',
+      group: '투자·금융',
+      desc: '세무·회계, 경제지표, 거시경제, 금융상품 등 금융 기초 문서 검색',
+      example: '개인사업자와 법인사업자는 세금 구조가 어떻게 다른가요?',
+    },
+    {
+      value: '06.주식투자',
+      label: '주식투자',
+      icon: '📈',
+      color: 'rose',
+      group: '투자·금융',
+      desc: '산업·재무제표·밸류에이션·기술적 분석 등 주식 투자 문서 검색',
+      example: 'PER과 PBR로 상대가치를 평가할 때 주의할 점은 무엇인가요?',
     },
     {
       value: '',
       label: '전체',
       icon: '🔍',
       color: 'stone',
+      group: '',
       desc: '모든 도메인을 통합 검색합니다',
       example: '상담사가 내담자의 정서 조절을 돕는 공통적인 방법은 무엇인가요?',
     },
@@ -94,18 +120,9 @@
     purple:  '#8B5CF6',
     teal:    '#14B8A6',
     sky:     '#0EA5E9',
+    gold:    '#CA8A04',
+    rose:    '#E11D48',
     stone:   '#6B7280',
-  };
-
-  const COLOR_MAP = {
-    amber:   { btn: 'text-[#444] hover:bg-[#FFF8E6]',   active: 'bg-[#5B9CFF] text-white shadow-sm' },
-    emerald: { btn: 'text-[#444] hover:bg-[#ECFDF5]',   active: 'bg-[#5B9CFF] text-white shadow-sm' },
-    blue:    { btn: 'text-[#444] hover:bg-[#EFF6FF]',   active: 'bg-[#5B9CFF] text-white shadow-sm' },
-    cyan:    { btn: 'text-[#444] hover:bg-[#ECFEFF]',   active: 'bg-[#5B9CFF] text-white shadow-sm' },
-    purple:  { btn: 'text-[#444] hover:bg-[#F5F3FF]',   active: 'bg-[#5B9CFF] text-white shadow-sm' },
-    teal:    { btn: 'text-[#444] hover:bg-[#F0FDFA]',   active: 'bg-[#5B9CFF] text-white shadow-sm' },
-    sky:     { btn: 'text-[#444] hover:bg-[#F0F9FF]',   active: 'bg-[#0EA5E9] text-white shadow-sm' },
-    stone:   { btn: 'text-[#444] hover:bg-[#F5F5F5]',   active: 'bg-[#5B9CFF] text-white shadow-sm' },
   };
 
   // ── 상태 ───────────────────────────────────────────────────────────
@@ -130,6 +147,7 @@
     btnClearHistory: $('#btnClearHistory'),
     queryInput:    $('#queryInput'),
     domainTabs:    $('#domainTabs'),
+    domainDot:     $('#domainDot'),
     topK:          $('#topK'),
     answerBox:     $('#answerBox'),
     citations:     $('#citations'),
@@ -232,30 +250,32 @@
     });
   }
 
-  // ── 도메인 탭 ─────────────────────────────────────────────────────
+  // ── 도메인 선택 (offcanvas select, group 단위로 optgroup 구성) ──────
   function buildDomainTabs() {
-    els.domainTabs.innerHTML = DOMAINS.map((d) => {
-      const c = COLOR_MAP[d.color];
-      const dot = DOMAIN_DOT_COLORS[d.color] || '#6B7280';
-      return `
-        <button
-          data-domain="${d.value}"
-          class="domain-tab flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-medium transition ${c.btn}"
-        >
-          <span class="h-2 w-2 shrink-0 rounded-full" style="background:${dot}"></span>
-          <span>${d.label}</span>
-        </button>
-      `;
+    const groups = [];
+    const byGroup = new Map();
+    DOMAINS.forEach((d) => {
+      const key = d.group || '';
+      if (!byGroup.has(key)) {
+        byGroup.set(key, []);
+        groups.push(key);
+      }
+      byGroup.get(key).push(d);
+    });
+
+    els.domainTabs.innerHTML = groups.map((key) => {
+      const options = byGroup.get(key)
+        .map((d) => `<option value="${d.value}">${d.icon} ${d.label}</option>`)
+        .join('');
+      return key ? `<optgroup label="${key}">${options}</optgroup>` : options;
     }).join('');
 
-    document.querySelectorAll('.domain-tab').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const val = btn.dataset.domain;
-        setActiveDomain(val);
-        state.defaultDomain = val;
-        persistState();
-        renderRequestPreview();
-      });
+    els.domainTabs.addEventListener('change', () => {
+      const val = els.domainTabs.value;
+      setActiveDomain(val);
+      state.defaultDomain = val;
+      persistState();
+      renderRequestPreview();
     });
   }
 
@@ -263,26 +283,23 @@
     const dom = DOMAINS.find((d) => d.value === value) || DOMAINS[0];
     state.defaultDomain = dom.value;
 
-    document.querySelectorAll('.domain-tab').forEach((btn) => {
-      const isActive = btn.dataset.domain === dom.value;
-      const c = COLOR_MAP[DOMAINS.find((d) => d.value === btn.dataset.domain)?.color || 'stone'];
-      const dot = DOMAIN_DOT_COLORS[DOMAINS.find((d) => d.value === btn.dataset.domain)?.color || 'stone'];
-      const dotEl = btn.querySelector('span');
-      if (isActive) {
-        btn.className = `domain-tab flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-medium transition ${c.active}`;
-        if (dotEl) dotEl.style.background = 'rgba(255,255,255,0.8)';
-      } else {
-        btn.className = `domain-tab flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-medium transition ${c.btn}`;
-        if (dotEl) dotEl.style.background = dot;
-      }
-    });
+    if (els.domainTabs) els.domainTabs.value = dom.value;
+    if (els.defaultDomain) els.defaultDomain.value = dom.value;
+    if (els.domainDot) els.domainDot.style.background = DOMAIN_DOT_COLORS[dom.color] || '#6B7280';
 
     // 예시 질문 업데이트
     if (els.btnUseExample) els.btnUseExample.textContent = dom.example;
 
     // 히어로 업데이트
     if (els.heroTitle) {
-      const labels = { '02.법률': '법률 문서 검색', '01.의료': '의료 문서 검색', '우울증': '우울증 상담 사례 검색', '불안장애': '불안장애 상담 사례 검색', '중독': '중독 상담 사례 검색', '일반군': '일반 상담 사례 검색', '여행': '여행지 추천 에이전트', '': '전체 도메인 통합 검색' };
+      const labels = {
+        '02.법률': '법률 문서 검색', '01.의료': '의료 문서 검색',
+        '우울증': '우울증 상담 사례 검색', '불안장애': '불안장애 상담 사례 검색',
+        '중독': '중독 상담 사례 검색', '일반군': '일반 상담 사례 검색',
+        '여행': '여행지 추천 에이전트',
+        '05.금융': '금융 문서 검색', '06.주식투자': '주식투자 문서 검색',
+        '': '전체 도메인 통합 검색',
+      };
       els.heroTitle.textContent = labels[dom.value] ?? dom.label + ' 검색';
     }
     if (els.heroDesc) els.heroDesc.textContent = dom.desc;
